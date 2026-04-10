@@ -1129,12 +1129,17 @@ async function initAudio(){
       };
     }
     return true;
-  }catch{return false;}
+  }catch{ isManualMode = true; return false; }
 }
 function getMicVol(){
-  if(!analyser) return {v:0, isMeow:false};
-  const b=new Uint8Array(analyser.frequencyBinCount);
-  analyser.getByteFrequencyData(b);
+  let pVol = 0;
+  let dataArray = new Uint8Array(analyser ? analyser.frequencyBinCount : 0);
+  if (analyser && !isManualMode) {
+    analyser.getByteFrequencyData(dataArray);
+    pVol = dataArray.reduce((a,b)=>a+b,0)/dataArray.length;
+  } else if (btnPressed) {
+    pVol = 85; // Simulated high volume on touch
+  }
   
   // Spectral weighing for "Meow Signature"
   // fftSize=512, binSize ~86Hz
@@ -1875,22 +1880,32 @@ document.getElementById('btn-join-go').addEventListener('click',()=>{
 });
 
 // ── Permission ──────────────────────────────────────
-document.getElementById('btn-perm').addEventListener('click', function() {
+let isManualMode = false;
+function forceStart(mode) {
+  console.log("FORCE_STARTING:", mode);
+  if(mode === 'manual') {
+    isManualMode = true;
+    spawnPopText('MANUAL OVERRIDE: TOUCH SENSOR ACTIVE', window.innerWidth/2, 200, 'var(--orange)');
+  }
+  startMatch();
+}
+
+document.getElementById('btn-perm').onclick = function() {
   const btn = this;
   btn.textContent = 'SYSTEM ACTIVE...';
   btn.style.opacity = '0.5';
   
-  // CRITICAL: Synchronously create Context
+  // 1. Synchronously create/resume context
   initAudioContext();
   
+  // 2. Request Mic
   initAudio().then(() => {
-    console.log("MATCH_STARTING");
     startMatch();
-  }).catch(e => {
-    btn.textContent = '确认入场';
-    btn.style.opacity = '1';
+  }).catch(err => {
+    console.warn("MIC_FAILED_FALLBACK", err);
+    forceStart('manual');
   });
-});
+};
 document.getElementById('btn-skip').addEventListener('click',()=>{
   console.log("SKIPPING PERM...");
   startMatch();
