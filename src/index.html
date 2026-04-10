@@ -1885,46 +1885,72 @@ document.getElementById('btn-join-go').addEventListener('click',()=>{
   gameMode=MODE.PVP; isHost=false; joinRoom(code);
 });
 
-// ── Permission & Boot (iOS Final Fix) ──
-function bindEvents() {
+// ── Permission & Boot (Consolidated Fix) ──
+function initTacticalCore() {
     const btnPerm = document.getElementById('btn-perm');
-    if(!btnPerm) return;
-    
-    btnPerm.onclick = function() {
-      try {
-        console.log("MOBILE_CLICK_ATTACHED");
-        this.textContent = 'CONNECTING...';
-        initAudioContext();
-        startTacticalAudio().then(() => {
-          startMatch();
-        }).catch(err => {
-          console.error(err);
-          isManualMode = true;
-          startMatch();
-        });
-      } catch(e) {
-        alert("BOOT_REJECTED: " + e.message);
-      }
-    };
-    
     const btnSkip = document.getElementById('btn-skip');
-    if(btnSkip) {
-        btnSkip.onclick = function() {
+    
+    if (btnPerm) {
+        btnPerm.onclick = function(e) {
+            e.preventDefault();
+            this.textContent = 'CONNECTING...';
+            this.style.opacity = '0.5';
+            
+            // 1. SYNC: Unlock Audio for iOS
+            if(!window.audioCtx) {
+                window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if(window.audioCtx.state === 'suspended') window.audioCtx.resume();
+            
+            // 2. ASYNC: Mic & Start
+            startTacticalAudio().then(() => {
+                startMatch();
+            }).catch(err => {
+                console.warn("MIC_FAIL", err);
+                isManualMode = true;
+                startMatch();
+            });
+        };
+    }
+    
+    if (btnSkip) {
+        btnSkip.onclick = function(e) {
+            e.preventDefault();
             isManualMode = true;
             startMatch();
         };
     }
 }
 
-// Ensure binding
+// Global Boot
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bindEvents);
+    document.addEventListener('DOMContentLoaded', initTacticalCore);
 } else {
-    bindEvents();
+    initTacticalCore();
 }
 
 window.onerror = function(m, u, l) {
-  alert("FATAL_JS_ERR: " + m + " at line " + l);
+    console.error("MOBILE_ERR:", m, l);
+    // Silent fail to log
+};
+
+// ── Meow button ─────────────────────────────────────
+const meowBtn=document.getElementById('btn-meow');
+function onMeowDown(e){
+  e.preventDefault(); btnPressed=true; meowBtn.classList.add('pressing');
+  if(navigator.vibrate) navigator.vibrate(50);
+}
+function onMeowUp(e){ e.preventDefault(); btnPressed=false; meowBtn.classList.remove('pressing'); }
+if(meowBtn) {
+    meowBtn.addEventListener('pointerdown', onMeowDown, {passive:false});
+    meowBtn.addEventListener('pointerup',   onMeowUp,   {passive:false});
+}
+
+// ── Result buttons ──────────────────────────────────
+document.getElementById('btn-again').onclick = () => startMatch();
+document.getElementById('btn-home').onclick = () => {
+  if(myPeer){myPeer.destroy();myPeer=null;}
+  showScreen('screen-title');
 };
 document.getElementById('btn-skip').addEventListener('click',()=>{
   console.log("SKIPPING PERM...");
