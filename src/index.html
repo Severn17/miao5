@@ -895,21 +895,36 @@ function spawnLoot() {
 // ── Web Audio SFX ────────────────────────────────
 let audioCtx = null;
 function initAudioContext() { 
-  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
+  if(!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // iOS fix: resume context on same interaction
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+  }
 }
 
-function playMeowSfx(freq, type='triangle', vol=0.1) {
-  initAudioContext();
-  if(!audioCtx) return;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(freq*0.5, audioCtx.currentTime + 0.1);
-  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-  osc.connect(gain); gain.connect(audioCtx.destination);
-  osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+function initAudio() {
+  return new Promise((resolve, reject) => {
+    try {
+      initAudioContext();
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(stream => {
+          input = audioCtx.createMediaStreamSource(stream);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 256;
+          input.connect(analyser);
+          console.log("AUDIO_INIT_SUCCESS");
+          resolve();
+        })
+        .catch(err => {
+          console.error("MIC_REQ_FAILED", err);
+          alert("请授权麦克风权限以开始撤离行动！");
+          reject(err);
+        });
+    } catch(e) {
+      alert("浏览器不支持音频接口喵~");
+      reject(e);
+    }
+  });
 }
 
 // ── Screen nav ─────────────────────────────────────
@@ -1860,10 +1875,21 @@ document.getElementById('btn-join-go').addEventListener('click',()=>{
 });
 
 // ── Permission ──────────────────────────────────────
-document.getElementById('btn-perm').addEventListener('click',async()=>{ 
-  console.log("AUTHORIZING...");
-  await initAudio(); 
-  startMatch(); 
+document.getElementById('btn-perm').addEventListener('click', function() {
+  const btn = this;
+  btn.textContent = 'SYSTEM ACTIVE...';
+  btn.style.opacity = '0.5';
+  
+  // CRITICAL: Synchronously create Context
+  initAudioContext();
+  
+  initAudio().then(() => {
+    console.log("MATCH_STARTING");
+    startMatch();
+  }).catch(e => {
+    btn.textContent = '确认入场';
+    btn.style.opacity = '1';
+  });
 });
 document.getElementById('btn-skip').addEventListener('click',()=>{
   console.log("SKIPPING PERM...");
