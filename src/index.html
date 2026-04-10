@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>喵呜 · Meow — 以喵声决胜负</title>
+  <meta name="description" content="喵呜 Meow — 用你的喵声决胜负！对着麦克风尽情喵叫，以响亮连续的猫叫声击败对手！" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700;900&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet" />
+  <link rel="preload" href="title.png" as="image">
+  <link rel="preload" href="cat_player.png" as="image">
+  <link rel="preload" href="cat_enemy.png" as="image">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" onerror="window.PEER_UNAVAILABLE=true"></script>
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ushelp/EasyQRCodeJS@master/dist/easy.qrcode.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0a0e14; /* Tactical Black */
+      --green:#00ff9d; /* Aurora Green / Extraction Green */
+      --grey:#1c232b; /* Gear Grey */
+      --orange:#ffb732; /* HUD Amber */
+      --red:#ff4d4d; /* MIA Red */
+      --cyan:#00e5ff; /* Recon Cyan */
+      --white:#e0e6ed;
+      --cat-glow: rgba(0, 255, 157, 0.2);
+    }
+    html,body{width:100%;height:100%;background:var(--bg);color:var(--white);
+      font-family:'Noto Serif SC',serif;overflow:hidden;touch-action:manipulation;}
+
+    /* ── Screens ── */
+    .screen{position:fixed;inset:0;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      transition:opacity .35s,transform .35s;will-change:opacity,transform;overflow-y:auto;}
+    .screen.hidden{opacity:0;pointer-events:none;transform:scale(.97);}
+
+    /* ── Starfield & Radar ── */
+    #starfield{position:fixed;inset:0;z-index:0;
+      background:radial-gradient(ellipse at 50% 0%,#1c232b,#0a0e14 70%);overflow:hidden;}
+    #starfield::after {
+      content:''; position:absolute; inset:0;
+      background-image: 
+        linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .radar-beam {
+      position:absolute; width:200%; height:200%; top:-50%; left:-50%;
+      background: conic-gradient(from 0deg, rgba(0,255,157,0.1), transparent 60deg);
+      animation: radarScan 4s linear infinite; pointer-events:none;
+    }
+    @keyframes radarScan { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .flash-overlay{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;}
+    .flash-overlay.flash-anim{animation:flashGo .4s ease-out forwards;}
+    @keyframes flashGo{0%{opacity:.9}100%{opacity:0}}
+    .petal{position:fixed;pointer-events:none;z-index:5;font-size:20px;
+      animation:petalFall var(--dur,4s) ease-in forwards;opacity:0;}
+    @keyframes petalFall{0%{opacity:1;transform:translateY(-20px) rotate(0)}
+      100%{opacity:0;transform:translateY(100vh) rotate(720deg)}}
+
+    /* ══════════════════ TITLE ══════════════════ */
+    #screen-title{z-index:10;gap:0;padding:24px 20px;}
+    .title-logo{width:min(320px,88vw);border-radius:22px;
+      box-shadow:0 0 60px rgba(255,75,163,.6),0 0 120px rgba(0,229,255,.3);
+      margin-bottom:16px;animation:logoFloat 3s ease-in-out infinite;}
+    @keyframes logoFloat{0%,100%{transform:translateY(0) rotate(-.5deg)}50%{transform:translateY(-10px) rotate(.5deg)}}
+    .title-kana{font-size:13px;letter-spacing:4px;opacity:.7;text-transform:uppercase;
+      margin-bottom:6px;font-family:'Outfit',sans-serif;color:var(--cyan);}
+    .title-slogan{font-size:16px;opacity:.85;margin-bottom:22px;color:var(--gold);letter-spacing:1px;}
+    .btn-start{background:linear-gradient(135deg,var(--orange),var(--pink));
+      border:none;color:white;font-size:22px;font-weight:700;
+      padding:16px 56px;border-radius:50px;cursor:pointer;letter-spacing:2px;
+      font-family:'Noto Serif SC',serif;
+      box-shadow:0 0 30px rgba(255,123,53,.6),0 8px 20px rgba(0,0,0,.4);
+      animation:btnPulse 2s ease-in-out infinite;transition:transform .15s;}
+    .btn-start:active{transform:scale(.95)!important;animation:none;}
+    @keyframes btnPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+    .title-rules{margin-top:16px;font-size:12px;opacity:.5;text-align:center;
+      line-height:1.8;font-family:'Outfit',sans-serif;max-width:280px;}
+    .badge-xhs{position:absolute;top:18px;right:18px;background:#ff2442;
+      border-radius:10px;padding:4px 10px;font-size:11px;font-weight:700;
+      letter-spacing:1px;font-family:'Outfit',sans-serif;color:white;}
+
+    /* ══════════════════ MODE SELECT ══════════════════ */
+    #screen-mode{z-index:10;gap:10px;padding:16px 18px;justify-content:flex-start;padding-top:44px;}
+    .mode-header{width:100%;max-width:390px;display:flex;align-items:center;gap:12px;margin-bottom:2px;}
+    .mode-back{font-size:22px;cursor:pointer;opacity:.7;background:none;border:none;color:white;padding:4px;}
+    .mode-title{font-size:20px;font-weight:700;flex:1;}
+
+    .nick-row{width:100%;max-width:390px;display:flex;align-items:center;gap:10px;
+      background:rgba(255,255,255,.06);border-radius:14px;
+      padding:10px 16px;border:1px solid rgba(255,255,255,.1);margin-bottom:2px;}
+    .nick-label{font-size:12px;opacity:.5;font-family:'Outfit',sans-serif;white-space:nowrap;}
+    .nick-input{flex:1;background:none;border:none;color:var(--gold);
+      font-size:16px;font-weight:700;font-family:'Outfit',sans-serif;outline:none;min-width:0;}
+    .nick-edit{font-size:16px;opacity:.4;}
+
+    .mode-card{width:100%;max-width:390px;background:rgba(255,255,255,.06);
+      border:1.5px solid rgba(255,255,255,.1);border-radius:18px;
+      padding:14px 18px;display:flex;flex-direction:column;gap:10px;
+      cursor:pointer;transition:all .2s;}
+    .mode-card:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22);transform:translateY(-2px);}
+    .mode-card:active{transform:scale(.98);}
+    .mode-card.ai-card{border-color:rgba(57,255,128,.25);}
+    .mode-card.face-card{border-color:rgba(255,75,163,.25);}
+    .mode-card.pvp-card{border-color:rgba(0,229,255,.25);}
+    .mode-card.lb-card{border-color:rgba(255,215,0,.25);}
+    .mode-card.ach-card{border-color:rgba(180,100,255,.25);}
+    .mode-card.skin-card{border-color:rgba(255,100,200,.25);}
+    .mode-card-row{display:flex;align-items:center;gap:14px;}
+    .mode-icon{font-size:32px;}
+    .mode-info{flex:1;}
+    .mode-name{font-size:17px;font-weight:700;margin-bottom:2px;}
+    .mode-desc{font-size:12px;opacity:.55;font-family:'Outfit',sans-serif;}
+    .mode-arrow{font-size:18px;opacity:.35;}
+
+    .diff-row{display:flex;gap:7px;}
+    .diff-btn{flex:1;padding:8px 4px;border-radius:10px;
+      border:1.5px solid rgba(255,255,255,.16);background:transparent;color:white;
+      font-size:12px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:600;transition:all .2s;}
+    .diff-btn.sel-easy{background:rgba(57,255,128,.15);border-color:var(--green);color:var(--green);}
+    .diff-btn.sel-normal{background:rgba(255,200,0,.15);border-color:var(--gold);color:var(--gold);}
+    .diff-btn.sel-hell{background:rgba(255,59,59,.18);border-color:var(--red);color:var(--red);}
+
+    /* ══════════════════ LEADERBOARD ══════════════════ */
+    #screen-leaderboard{z-index:10;justify-content:flex-start;gap:0;padding:0;overflow:hidden;}
+    .lb-header{width:100%;padding:16px 20px 12px;background:rgba(0,0,0,.5);
+      backdrop-filter:blur(12px);display:flex;align-items:center;gap:12px;
+      border-bottom:1px solid rgba(255,255,255,.08);flex-shrink:0;}
+    .lb-back{font-size:22px;cursor:pointer;background:none;border:none;color:white;opacity:.7;padding:0;}
+    .lb-title-col{flex:1;}
+    .lb-title{font-size:20px;font-weight:700;}
+    .lb-subtitle{font-size:11px;opacity:.5;font-family:'Outfit',sans-serif;}
+    .lb-tabs {display:flex; width:100%; border-bottom:1px solid rgba(255,255,255,0.08); background:rgba(0,0,0,0.3);}
+    .lb-tab {flex:1; text-align:center; padding:12px; font-weight:700; cursor:pointer; color:#888; font-size:13px; transition:all .2s; border-bottom:2px solid transparent;}
+    .lb-tab.active {color:var(--gold); border-bottom-color:var(--gold); background:rgba(255,215,0,0.05);}
+    .province-tag {font-size:10px; padding:2px 6px; border-radius:4px; background:rgba(0,229,255,0.1); color:var(--cyan); margin-left:6px; font-weight:normal;}
+
+    .lb-me-pin{flex-shrink:0;margin:10px 14px 2px;
+      background:rgba(255,123,53,.12);border:1px solid rgba(255,123,53,.3);
+      border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:10px;}
+    .lb-me-label{font-size:10px;opacity:.55;font-family:'Outfit',sans-serif;}
+    .lb-me-name{font-size:14px;font-weight:700;}
+
+    .lb-scroll{flex:1;width:100%;overflow-y:auto;padding:8px 14px 60px;
+      display:flex;flex-direction:column;gap:7px;-webkit-overflow-scrolling:touch;}
+    .lb-item{display:flex;align-items:center;gap:11px;
+      background:rgba(255,255,255,.05);border-radius:13px;
+      padding:11px 13px;border:1px solid rgba(255,255,255,.07);flex-shrink:0;}
+    .lb-item.lb-me{background:rgba(255,123,53,.12);border-color:rgba(255,123,53,.35);
+      box-shadow:0 0 18px rgba(255,123,53,.12);}
+    .lb-rank{font-size:15px;font-weight:700;min-width:26px;font-family:'Outfit',sans-serif;text-align:center;}
+    .lb-rank-1{color:var(--gold)} .lb-rank-2{color:#d0d0d0} .lb-rank-3{color:#cd7f32}
+    .lb-avatar{font-size:25px;}
+    .lb-name{flex:1;font-size:14px;font-weight:600;}
+    .lb-score-col{display:flex;flex-direction:column;align-items:flex-end;gap:1px;}
+    .lb-score{font-size:22px;font-weight:700;color:var(--gold);font-family:'Outfit',sans-serif;}
+    .lb-wins{font-size:10px;opacity:.5;font-family:'Outfit',sans-serif;}
+
+    /* ══════════════════ ROOM ══════════════════ */
+    #screen-room{z-index:10;gap:16px;padding:30px 20px;justify-content:flex-start;padding-top:44px;}
+    .room-header{width:100%;max-width:380px;display:flex;align-items:center;gap:12px;}
+    .room-back{font-size:22px;cursor:pointer;background:none;border:none;color:white;opacity:.7;}
+    .room-title-text{font-size:20px;font-weight:700;}
+    .room-tabs{display:flex;width:100%;max-width:380px;
+      background:rgba(255,255,255,.07);border-radius:13px;padding:4px;gap:4px;}
+    .room-tab{flex:1;padding:10px;text-align:center;border-radius:9px;
+      border:none;background:none;color:white;font-size:14px;font-weight:700;
+      cursor:pointer;transition:all .2s;font-family:'Outfit',sans-serif;opacity:.6;}
+    .room-tab.active{background:rgba(255,255,255,.14);opacity:1;}
+
+    .room-code-box{background:rgba(255,255,255,.07);border:1.5px solid rgba(0,229,255,.22);
+      border-radius:22px;padding:22px 26px;display:flex;flex-direction:column;
+      align-items:center;gap:13px;width:100%;max-width:360px;}
+    .room-code-lbl{font-size:11px;letter-spacing:3px;opacity:.5;font-family:'Outfit',sans-serif;}
+    .room-code-big{font-size:42px;font-weight:900;letter-spacing:10px;
+      font-family:'Outfit',sans-serif;color:var(--gold);
+      filter:drop-shadow(0 0 12px rgba(255,215,0,.5));}
+    .room-status-txt{font-size:13px;opacity:.65;text-align:center;}
+    .room-pulse{animation:rPulse 1.4s ease-in-out infinite;}
+    @keyframes rPulse{0%,100%{opacity:.4}50%{opacity:1}}
+    .btn-copy-link{width:100%;padding:12px;border-radius:12px;
+      background:rgba(0,229,255,.14);border:1.5px solid rgba(0,229,255,.35);
+      color:var(--cyan);font-size:14px;font-weight:700;cursor:pointer;
+      font-family:'Outfit',sans-serif;letter-spacing:1px;transition:all .2s;}
+    .btn-copy-link:active{background:rgba(0,229,255,.25);}
+
+    .join-input-wrap{display:flex;flex-direction:column;gap:10px;
+      width:100%;max-width:360px;align-items:center;}
+    .join-input{width:100%;text-align:center;font-size:34px;font-weight:900;letter-spacing:8px;
+      background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.18);
+      color:white;padding:18px;border-radius:18px;font-family:'Outfit',sans-serif;
+      outline:none;text-transform:uppercase;}
+    .join-input:focus{border-color:var(--cyan);box-shadow:0 0 20px rgba(0,229,255,.25);}
+    .join-input::placeholder{opacity:.28;}
+    .btn-join-go{width:100%;padding:14px;border-radius:13px;
+      background:linear-gradient(135deg,var(--cyan),#0070ff);
+      border:none;color:#001a2e;font-size:17px;font-weight:700;
+      cursor:pointer;font-family:'Outfit',sans-serif;letter-spacing:1px;}
+    .join-status-txt{font-size:13px;opacity:.65;text-align:center;
+      font-family:'Outfit',sans-serif;min-height:20px;}
+
+    .wait-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;}
+    .wait-spinner{font-size:60px;animation:spin360 2s linear infinite;}
+    @keyframes spin360{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    .wait-title{font-size:22px;font-weight:700;}
+    .wait-desc{font-size:13px;opacity:.6;text-align:center;max-width:260px;
+      font-family:'Outfit',sans-serif;line-height:1.7;}
+
+    /* ══════════════════ PERMISSION ══════════════════ */
+    #screen-perm{z-index:10;gap:20px;padding:40px;}
+    .perm-icon{font-size:80px;animation:micPulse 1.2s ease-in-out infinite;}
+    @keyframes micPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 10px var(--cyan))}
+      50%{transform:scale(1.1);filter:drop-shadow(0 0 25px var(--cyan))}}
+    .perm-title{font-size:26px;font-weight:700;text-align:center;}
+    .perm-desc{font-size:14px;opacity:.65;text-align:center;line-height:1.8;
+      max-width:280px;font-family:'Outfit',sans-serif;}
+    .btn-perm{background:linear-gradient(135deg,var(--cyan),#0088ff);
+      border:none;color:#0a0a1a;font-size:18px;font-weight:700;
+      padding:14px 48px;border-radius:50px;cursor:pointer;letter-spacing:1px;
+      font-family:'Noto Serif SC',serif;box-shadow:0 0 30px rgba(0,229,255,.5);}
+    .btn-skip{font-size:13px;opacity:.45;cursor:pointer;font-family:'Outfit',sans-serif;
+      margin-top:-10px;background:none;border:none;color:white;}
+
+    /* ══════════════════ COUNTDOWN ══════════════════ */
+    #screen-countdown{z-index:10;gap:8px;}
+    .countdown-vs{font-size:15px;opacity:.6;letter-spacing:3px;
+      font-family:'Outfit',sans-serif;text-align:center;min-height:22px;}
+    .countdown-num{font-size:clamp(120px,40vw,200px);font-weight:900;line-height:1;
+      background:linear-gradient(135deg,var(--gold),var(--orange));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      filter:drop-shadow(0 0 30px rgba(255,215,0,.8));animation:countAnim .5s ease-out;}
+    @keyframes countAnim{from{transform:scale(1.6);opacity:0}to{transform:scale(1);opacity:1}}
+    .countdown-go{font-size:clamp(60px,20vw,100px);font-weight:900;
+      background:linear-gradient(135deg,var(--green),var(--cyan));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      filter:drop-shadow(0 0 30px rgba(57,255,128,.8));animation:countAnim .4s ease-out;}
+
+    /* ══════════════════ BATTLE ══════════════════ */
+    #screen-battle{z-index:10;justify-content:flex-start;padding:0;gap:0;}
+    .power-bars{width:100%;display:flex;align-items:center;gap:8px;
+      padding:12px 14px 8px;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);position:relative;}
+    .bar-wrap{flex:1;height:22px;background:rgba(255,255,255,.1);
+      border-radius:11px;overflow:hidden;border:1.5px solid rgba(255,255,255,.2);}
+    .bar-fill{height:100%;border-radius:11px;transition:width .1s linear;
+      position:relative;overflow:hidden;}
+    .bar-fill::after{content:'';position:absolute;inset:0;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);
+      animation:barShine 1.5s linear infinite;}
+    @keyframes barShine{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+    .bar-player{background:linear-gradient(90deg,var(--orange),var(--pink));}
+    .bar-enemy{background:linear-gradient(90deg,var(--cyan),#0055ff);transform:scaleX(-1);}
+    .bar-wrap.enemy-wrap{transform:scaleX(-1);}
+    .vs-badge{font-size:14px;font-weight:700;letter-spacing:1px;color:var(--gold);
+      min-width:30px;text-align:center;font-family:'Outfit',sans-serif;}
+    .score-badge{position:absolute;top:4px;font-size:10px;
+      font-family:'Outfit',sans-serif;opacity:.7;letter-spacing:1px;}
+    .score-badge.left{left:14px;color:var(--orange);}
+    .score-badge.right{right:14px;color:var(--cyan);}
+    .round-info{width:100%;text-align:center;padding:6px;font-size:12px;
+      letter-spacing:2px;opacity:.6;font-family:'Outfit',sans-serif;background:rgba(0,0,0,.3);}
+
+    .arena{flex:1;width:100%;display:flex;align-items:center;justify-content:space-between;
+      padding:10px 6px;position:relative;overflow:hidden;}
+    .arena-bg{position:absolute;inset:0;background:linear-gradient(180deg,#2a1040,#1a0828);}
+    .arena-floor{position:absolute;bottom:0;left:0;right:0;height:60px;
+      background:linear-gradient(180deg,transparent,rgba(255,75,163,.08));
+      border-top:1px solid rgba(255,75,163,.2);}
+    .cat-container{position:relative;z-index:2;display:flex;flex-direction:column;
+      align-items:center;gap:6px;}
+    .cat-name-lbl{font-size:10px;letter-spacing:2px;opacity:.7;font-family:'Outfit',sans-serif;}
+    .cat-img{width:clamp(100px,32vw,145px);height:clamp(100px,32vw,145px);object-fit:contain;
+      filter:drop-shadow(0 0 15px var(--cat-glow,transparent));transition:transform .15s,filter .15s;}
+    .cat-player{--cat-glow:rgba(255,123,53,.7);}
+    .cat-enemy{--cat-glow:rgba(0,229,255,.7);transform:scaleX(-1);}
+    
+    /* Skins */
+    .skin-cyber { filter: drop-shadow(0 0 15px #00ff00) hue-rotate(90deg) saturate(200%) !important; }
+    .skin-dark { filter: drop-shadow(0 0 15px #555) invert(1) grayscale(50%) !important; }
+    .skin-king { filter: drop-shadow(0 0 20px gold) sepia(1) hue-rotate(330deg) saturate(300%) !important; }
+    .crown-addon { position: absolute; top: -15px; left: 50%; transform: translateX(-50%) rotate(15deg); font-size: 32px; z-index: 3; display: none; pointer-events: none; }
+    .has-crown .crown-addon { display: block; }
+    .cat-img.winner-bounce{animation:winnerBounce .3s ease-in-out infinite alternate;}
+    @keyframes winnerBounce{from{transform:translateY(0)}to{transform:translateY(-12px)}}
+    .cat-enemy.winner-bounce{transform:scaleX(-1) translateY(0)}
+    .cat-bubble{position:absolute;top:-28px;left:50%;transform:translateX(-50%);
+      background:rgba(255,255,255,.9);color:#1a0d2e;font-size:14px;
+      border-radius:20px;padding:3px 10px;white-space:nowrap;font-weight:700;
+      opacity:0;transition:opacity .2s;pointer-events:none;}
+    .cat-bubble.show{opacity:1;}
+
+    .timer-wrap{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      display:flex;flex-direction:column;align-items:center;z-index:3;}
+    #battle-timer{font-size:clamp(44px,14vw,70px);font-weight:900;
+      font-family:'Outfit',sans-serif;line-height:1;
+      background:linear-gradient(135deg,var(--gold),var(--orange));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      filter:drop-shadow(0 0 12px rgba(255,215,0,.6));}
+    #battle-timer.urgent{animation:timerUrge .3s ease-in-out infinite alternate;}
+    @keyframes timerUrge{from{filter:drop-shadow(0 0 12px rgba(255,50,50,.6));transform:scale(1)}
+      to{filter:drop-shadow(0 0 24px rgba(255,50,50,1));transform:scale(1.08)}}
+    .timer-label{font-size:10px;opacity:.5;letter-spacing:2px;
+      font-family:'Outfit',sans-serif;margin-top:4px;}
+
+    .meow-meter-wrap{width:100%;padding:0 16px 4px;display:flex;flex-direction:column;
+      align-items:center;gap:4px;position:relative;z-index:2;background:rgba(0,0,0,.3);}
+    .meow-meter-label{font-size:10px;letter-spacing:2px;opacity:.5;font-family:'Outfit',sans-serif;}
+    .meow-bar-outer{width:100%;height:14px;background:rgba(255,255,255,.08);
+      border-radius:7px;overflow:hidden;border:1px solid rgba(255,255,255,.1);}
+    #meow-bar{height:100%;width:0%;border-radius:7px;
+      background:linear-gradient(90deg,var(--orange),var(--pink),var(--gold));
+      transition:width .05s linear;box-shadow:0 0 12px rgba(255,75,163,.8);}
+
+    .battle-bottom{width:100%;padding:10px 20px 18px;display:flex;flex-direction:column;
+      align-items:center;gap:7px;background:rgba(0,0,0,.4);backdrop-filter:blur(10px);}
+    #btn-meow{width:clamp(148px,50vw,208px);height:clamp(148px,50vw,208px);border-radius:50%;
+      background:radial-gradient(circle at 35% 35%,#ff9f60,#ff4080,#c0005a);
+      border:4px solid rgba(255,255,255,.3);cursor:pointer;outline:none;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+      box-shadow:0 0 40px rgba(255,64,128,.6),inset 0 2px 10px rgba(255,255,255,.2),0 8px 24px rgba(0,0,0,.5);
+      transition:transform .08s,box-shadow .08s;user-select:none;-webkit-user-select:none;
+      position:relative;overflow:hidden;}
+    #btn-meow::before{content:'';position:absolute;inset:0;border-radius:50%;
+      background:radial-gradient(circle at 35% 35%,rgba(255,255,255,.25),transparent 60%);
+      pointer-events:none;}
+    #btn-meow.pressing{transform:scale(.93);
+      box-shadow:0 0 70px rgba(255,64,128,1),inset 0 2px 10px rgba(255,255,255,.3),0 4px 12px rgba(0,0,0,.5);}
+    .btn-meow-emoji{font-size:clamp(40px,14vw,62px);line-height:1;}
+    .btn-meow-text{font-size:clamp(16px,6vw,24px);font-weight:900;letter-spacing:3px;
+      color:white;font-family:'Outfit',sans-serif;}
+    .btn-meow-hint{font-size:10px;opacity:.7;letter-spacing:1px;
+      color:rgba(255,255,255,.8);font-family:'Outfit',sans-serif;}
+    .ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.4);
+      transform:scale(0);animation:rippleAnim .5s ease-out forwards;pointer-events:none;}
+    @keyframes rippleAnim{to{transform:scale(4);opacity:0}}
+    .score-dots{display:flex;gap:8px;}
+    .dot{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);transition:all .3s;}
+    .dot.won-player{background:var(--orange);border-color:var(--orange);box-shadow:0 0 8px var(--orange);}
+    .dot.won-enemy{background:var(--cyan);border-color:var(--cyan);box-shadow:0 0 8px var(--cyan);}
+
+    /* ══════════════════ RESULT ══════════════════ */
+    #screen-result{z-index:10;gap:11px;padding:26px 22px;}
+    .result-title{font-size:clamp(34px,12vw,56px);font-weight:900;text-align:center;line-height:1.1;}
+    .result-title.win{background:linear-gradient(135deg,var(--gold),var(--orange),var(--pink));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      filter:drop-shadow(0 0 20px rgba(255,215,0,.8));animation:resultWin .5s ease-out;}
+    .result-title.lose{background:linear-gradient(135deg,#888,#aaa);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      animation:resultLose .5s ease-out;}
+    .result-title.draw{background:linear-gradient(135deg,var(--cyan),var(--pink));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    @keyframes resultWin{from{transform:scale(1.5);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes resultLose{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+    .result-cats{display:flex;align-items:flex-end;gap:10px;}
+    .result-cat-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;}
+    .result-cat-svg{width:clamp(68px,22vw,105px);}
+    .result-cat-svg.win-cat{animation:winCatBounce .5s ease-in-out infinite alternate;}
+    @keyframes winCatBounce{from{transform:translateY(0) rotate(-3deg)}to{transform:translateY(-14px) rotate(3deg)}}
+    .result-cat-label{font-size:11px;opacity:.6;letter-spacing:2px;font-family:'Outfit',sans-serif;}
+    .result-vs{font-size:18px;font-weight:700;color:var(--gold);opacity:.75;
+      font-family:'Outfit',sans-serif;align-self:center;}
+    .result-stat{display:flex;gap:14px;background:rgba(255,255,255,.07);
+      border-radius:16px;padding:11px 20px;}
+    .stat-item{display:flex;flex-direction:column;align-items:center;gap:4px;}
+    .stat-num{font-size:25px;font-weight:700;color:var(--gold);font-family:'Outfit',sans-serif;}
+    .stat-lbl{font-size:10px;opacity:.55;letter-spacing:1px;font-family:'Outfit',sans-serif;}
+    .result-comment{font-size:14px;text-align:center;opacity:.8;line-height:1.6;
+      max-width:280px;color:var(--gold);}
+    .btn-row{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;}
+    .btn-again{background:linear-gradient(135deg,var(--orange),var(--pink));
+      border:none;color:white;padding:12px 30px;border-radius:50px;font-size:15px;
+      font-weight:700;cursor:pointer;letter-spacing:1px;font-family:'Noto Serif SC',serif;
+      box-shadow:0 0 20px rgba(255,123,53,.5);}
+    .btn-home{background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);
+      color:white;padding:12px 22px;border-radius:50px;font-size:14px;font-weight:700;
+      cursor:pointer;font-family:'Outfit',sans-serif;}
+    .btn-share{background:linear-gradient(135deg,#ff2442,#ff6680);border:none;color:white;
+      padding:12px 22px;border-radius:50px;font-size:14px;font-weight:700;cursor:pointer;
+      letter-spacing:1px;display:flex;align-items:center;gap:6px;
+      font-family:'Outfit',sans-serif;box-shadow:0 0 20px rgba(255,36,66,.5);}
+    .btn-share::before{content:'📕';font-size:16px;}
+
+    /* ══════════════════ SOCIAL ═════════════════════ */
+    .social-footer {
+      margin-top: 25px;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      padding-bottom: 30px;
+    }
+    .xhs-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255, 36, 66, 0.12);
+      border: 1.5px solid rgba(255, 36, 66, 0.4);
+      color: white;
+      padding: 12px 28px;
+      border-radius: 50px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+      backdrop-filter: blur(12px);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 4px 20px rgba(255, 36, 66, 0.15);
+      font-family: 'Outfit', sans-serif;
+    }
+    .xhs-btn:active {
+      transform: scale(0.94);
+      background: rgba(255, 36, 66, 0.25);
+      box-shadow: 0 2px 10px rgba(255, 36, 66, 0.1);
+    }
+    .xhs-icon {
+      font-size: 20px;
+      filter: drop-shadow(0 0 8px rgba(255, 36, 66, 0.8));
+    }
+
+    @media(max-height:680px){
+      .title-logo{width:min(220px,70vw);margin-bottom:10px;}
+      .btn-start{font-size:18px;padding:12px 38px;}
+      #btn-meow{width:clamp(108px,38vw,148px);height:clamp(108px,38vw,148px);}
+      #screen-mode{padding-top:28px;gap:8px;}
+      .mode-card{padding:11px 14px;}
+    }
+    /* ══════════════════ JUICE ═══════════════════════ */
+    /* Meme Juice: Glitch instead of Glow */
+    .screen-meme-glitch { animation: glitchAnim 0.2s infinite; }
+    @keyframes glitchAnim {
+      0% { transform: translate(0); filter: hue-rotate(0deg) skew(0deg); }
+      10% { transform: translate(-5px, 5px); filter: hue-rotate(90deg) invert(0.2); }
+      30% { transform: translate(5px, -5px); filter: hue-rotate(180deg) saturate(3); }
+      50% { transform: translate(-8px, -2px) scale(1.1); filter: contrast(4); }
+      80% { transform: translate(4px, 4px) skew(10deg); filter: blur(1px); }
+      100% { transform: translate(0); }
+    }
+    .meme-broken { animation: memeBroken 0.15s infinite; filter: contrast(5) saturate(5) !important; }
+    @keyframes memeBroken {
+      0% { transform: scale(1) skew(0deg); }
+      50% { transform: scale(1.2) skew(15deg) rotate(5deg); }
+      100% { transform: scale(1) skew(0deg); }
+    }
+    .pop-text {
+      position: absolute; border-radius: 5px; pointer-events: none;
+      font-weight: 900; font-family: 'Outfit', sans-serif; z-index: 100;
+      animation: popOut 0.8s ease-out forwards;
+    }
+    @keyframes popOut {
+      0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+      20% { transform: translate(-50%, -100%) scale(1.2); opacity: 1; }
+      100% { transform: translate(-50%, -250%) scale(1); opacity: 0; }
+    }
+    .cat-img.power-pulse { filter: drop-shadow(0 0 35px var(--cat-glow)) brightness(1.3); }
+    .bar-player.glow { box-shadow: 0 0 15px var(--orange); }
+    .bar-enemy.glow { box-shadow: 0 0 15px var(--cyan); }
+      /* Poster Styler */
+    .poster-hidden{position:absolute;left:-9999px;top:0;width:400px;background:var(--bg);color:white;overflow:hidden;padding:30px;font-family:'Outfit',sans-serif;}
+    .poster-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:30px;}
+    .poster-title{font-size:32px;font-weight:900;color:var(--gold);text-shadow: 0 4px 10px rgba(0,0,0,0.5);}
+    .poster-rank-badge{padding:10px 20px;border-radius:30px;background:rgba(255,255,255,0.1);border:1px solid var(--gold);color:var(--gold);font-weight:bold;font-size:18px;}
+    .poster-cats{display:flex;justify-content:center;align-items:center;gap:30px;margin-bottom:40px;height:120px;}
+    .poster-score-box{text-align:center;background:rgba(255,255,255,0.05);border-radius:20px;padding:25px;margin-bottom:30px;border:1px solid rgba(255,123,53,0.3);}
+    .poster-score-num{font-size:64px;font-weight:900;color:var(--orange);line-height:1;}
+    .poster-score-lbl{font-size:16px;color:#aaa;margin-top:5px;}
+    .poster-footer{display:flex;align-items:center;gap:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.1);}
+    .poster-qr-wrap{width:110px;height:110px;background:rgba(255,255,255,0.05);padding:10px;border-radius:15px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.1);box-shadow:0 0 20px rgba(0,0,0,0.3);}
+    .poster-info{flex:1;text-align:left;}
+    .poster-info h4{font-size:18px;margin-bottom:5px;color:var(--gold);}
+    .poster-info p{font-size:13px;color:#888;line-height:1.4;}
+</style>
+</head>
+<body>
+
+<div id="starfield">
+  <div class="radar-beam"></div>
+</div>
+<div class="flash-overlay" id="flash-overlay"></div>
+
+<!-- ══ TITLE ══════════════════════════════════════ -->
+<div class="screen" id="screen-title">
+  <div class="badge-xhs" style="background:var(--green); color:#000;">⚠️ 战区警报：抽象模因爆发 ⚠️</div>
+  <div id="title-txt" style="font-size:clamp(50px,16vw,75px);font-weight:900;background:linear-gradient(135deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 15px var(--green));margin-bottom:-5px; font-family:'Outfit',sans-serif;letter-spacing:-2px;">喵呜：撤离行动</div>
+  <div class="title-kana" style="color:var(--green); opacity:0.6;">MEOW: EXTRACTION · 战术抽象对决</div>
+  <div class="title-slogan" style="opacity:0.8; font-size:14px; color:var(--white);">摸金还是社死？这取决于你的嗓门。</div>
+  <button class="btn-start" id="btn-start" style="border-radius:4px; padding:18px 60px; background:var(--green); color:#000; font-family:'Outfit',sans-serif; text-transform:uppercase; letter-spacing:4px; font-weight:900; box-shadow:0 0 30px rgba(0,255,157,0.3); border:none;">⚡ 确认入场 ⚡</button>
+  <div class="title-rules" style="color:rgba(255,255,255,0.4);">
+    [战术简报]<br/>
+    1. 对着麦克风喵叫，功率越高，搜刮到的物资越多。<br/>
+    2. 只有撤离成功（获胜）才能带出物资升级干员。<br/>
+    3. 撤离失败意味着：你失去一切，并在全网社死。
+  </div>
+</div>
+
+<!-- ══ MODE SELECT ══════════════════════════════════ -->
+<div class="screen hidden" id="screen-mode">
+  <div class="mode-header">
+    <button class="mode-back" id="mode-back">←</button>
+    <div class="mode-title">选择对战模式</div>
+  </div>
+  <div class="nick-row">
+    <span class="nick-label">我的名字</span>
+    <input class="nick-input" id="nick-input" maxlength="12" placeholder="喵星侠" />
+    <span class="nick-edit">✏️</span>
+  </div>
+  <!-- AI -->
+  <div class="mode-card ai-card" id="card-ai">
+    <div class="mode-card-row">
+      <span class="mode-icon">🤖</span>
+      <div class="mode-info">
+        <div class="mode-name">人机对战</div>
+        <div class="mode-desc">挑战 AI，磨练你的喵声战力</div>
+      </div>
+      <span class="mode-arrow">›</span>
+    </div>
+    <div class="diff-row" id="diff-row">
+      <button class="diff-btn sel-easy" data-diff="easy">😺 简单</button>
+      <button class="diff-btn" data-diff="normal">😼 普通</button>
+      <button class="diff-btn" data-diff="hell">😾 地狱</button>
+    </div>
+  </div>
+  <!-- Face to face -->
+  <div class="mode-card face-card" id="card-face">
+    <div class="mode-card-row">
+      <span class="mode-icon">📱</span>
+      <div class="mode-info">
+        <div class="mode-name">面对面对战</div>
+        <div class="mode-desc">同一部手机，传给朋友轮流喵叫</div>
+      </div>
+      <span class="mode-arrow">›</span>
+    </div>
+  </div>
+  <!-- PvP -->
+  <div class="mode-card pvp-card" id="card-pvp">
+    <div class="mode-card-row">
+      <span class="mode-icon">🔗</span>
+      <div class="mode-info">
+        <div class="mode-name">邀请好友</div>
+        <div class="mode-desc">生成房间码，跨设备实时对战</div>
+      </div>
+      <span class="mode-arrow">›</span>
+    </div>
+  </div>
+  <!-- Leaderboard -->
+  <div class="mode-card lb-card" id="card-lb">
+    <div class="mode-card-row">
+      <span class="mode-icon">🏆</span>
+      <div class="mode-info">
+        <div class="mode-name">全球排行榜</div>
+        <div class="mode-desc">查看全球顶尖喵呜高手</div>
+      </div>
+      <span class="mode-arrow">›</span>
+    </div>
+  </div>
+  <!-- Achievement -->
+  <div class="mode-card ach-card" id="card-ach">
+    <div class="mode-card-row">
+      <span class="mode-icon">🎖</span>
+      <div class="mode-info">
+        <div class="mode-name">我的勋章</div>
+        <div class="mode-desc">你解锁的辉煌喵星成就</div>
+      </div>
+      <span class="mode-arrow">›</span>
+    </div>
+  </div>
+  <!-- Skin -->
+    <div class="mode-card skin-card" id="card-skin">
+    <div class="mode-card-row">
+      <span class="mode-icon">🧥</span>
+      <div class="mode-info">
+        <div class="mode-name">我的猫窝(皮肤)</div>
+        <div class="mode-desc">为你的猫咪换上荣耀装扮</div>
+      </div>
+      <span class="mode-arrow">›</span>
+    </div>
+  </div>
+
+  <!-- Social Footer -->
+  <div class="social-footer">
+    <a href="https://xhslink.com/m/iRBDZaHQZd" target="_blank" class="xhs-btn">
+      <span class="xhs-icon">📕</span>
+      <span>关注作者 · 查看更多皮肤</span>
+    </a>
+  </div>
+</div>
+
+<!-- ══ LEADERBOARD ══════════════════════════════════ -->
+<div class="screen hidden" id="screen-leaderboard">
+  <div class="lb-tabs">
+    <div class="lb-tab active" id="tab-lb-global">🏆 个人战绩榜</div>
+    <div class="lb-tab" id="tab-lb-prov">🗺️ 全国集结榜</div>
+  </div>
+  <div class="lb-me-pin" id="lb-me-pin">
+    <span style="font-size:24px">🐱</span>
+    <div style="flex:1">
+      <div class="lb-me-name" id="lb-me-name">—</div>
+      <div class="lb-me-label" id="lb-me-label">我的排名 · 战力刷新中</div>
+    </div>
+    <div class="lb-score-col">
+      <div class="lb-score" id="lb-me-score">—</div>
+      <div class="lb-wins" id="lb-me-wins">暂无记录</div>
+    </div>
+  </div>
+  <div class="lb-scroll" id="lb-list"></div>
+</div>
+
+<!-- ══ ACHIEVEMENTS ════════════════════════════════ -->
+<div class="screen hidden" id="screen-achievements">
+  <div class="lb-header">
+    <button class="lb-back" id="ach-back">←</button>
+    <div class="lb-title-col">
+      <div class="lb-title">🎖 我的勋章墙</div>
+      <div class="lb-subtitle">喵声传奇，见证你的成长</div>
+    </div>
+  </div>
+  <div class="lb-scroll" style="width:100%; max-width:400px; padding:10px 20px; display:flex; flex-direction:column; gap:12px;" id="ach-list"></div>
+</div>
+
+<!-- ══ SKINS ═══════════════════════════════════════ -->
+<div class="screen hidden" id="screen-skins">
+  <div class="lb-header">
+    <button class="lb-back" id="skin-back">←</button>
+    <div class="lb-title-col">
+      <div class="lb-title">🧥 我的猫窝</div>
+      <div class="lb-subtitle">选择你的专属战场形象</div>
+    </div>
+  </div>
+  <div class="lb-scroll" style="width:100%; max-width:400px; padding:10px 20px; display:grid; grid-template-columns:1fr 1fr; gap:15px;" id="skin-list"></div>
+</div>
+
+<!-- ══ ROOM ══════════════════════════════════════════ -->
+<div class="screen hidden" id="screen-room">
+  <div class="room-header">
+    <button class="room-back" id="room-back">←</button>
+    <div class="room-title-text">邀请好友对战</div>
+  </div>
+  <div class="room-tabs">
+    <button class="room-tab active" id="tab-create">🏠 创建房间</button>
+    <button class="room-tab" id="tab-join">🚪 加入房间</button>
+  </div>
+  <!-- Create panel -->
+  <div id="room-create-panel" style="display:flex;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;">
+    <div class="room-code-box">
+      <div class="room-code-lbl">房间码 · ROOM CODE</div>
+      <div class="room-code-big" id="room-code-display">——</div>
+      <div class="room-status-txt room-pulse" id="room-create-status">正在创建房间…</div>
+      <button class="btn-copy-link" id="btn-copy-link">📋 复制邀请链接</button>
+    </div>
+  </div>
+  <!-- Join panel -->
+  <div id="room-join-panel" style="display:none;flex-direction:column;align-items:center;gap:12px;width:100%;max-width:360px;">
+    <div class="join-input-wrap">
+      <input class="join-input" id="join-code-input" maxlength="6" placeholder="XXXXXX"
+             autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" />
+      <button class="btn-join-go" id="btn-join-go">🐱 加入对战</button>
+    </div>
+    <div class="join-status-txt" id="join-status"></div>
+  </div>
+  <!-- Wait panel -->
+  <div id="room-wait-panel" style="display:none;">
+    <div class="wait-wrap">
+      <div class="wait-spinner">🐱</div>
+      <div class="wait-title" id="wait-title">等待对手加入…</div>
+      <div class="wait-desc" id="wait-desc">把房间码发给朋友<br/>对战即将开始！</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ PERMISSION ══════════════════════════════════ -->
+<div class="screen hidden" id="screen-perm">
+  <div class="perm-icon">🎙️</div>
+  <div class="perm-title">需要麦克风权限</div>
+  <div class="perm-desc">喵呜需要获取麦克风权限来感知你的喵叫战力，请允许麦克风访问。</div>
+  <button class="btn-perm" id="btn-perm">🐱 授权并开战</button>
+  <button class="btn-skip" id="btn-skip">跳过（仅按钮模式）</button>
+</div>
+
+<!-- ══ COUNTDOWN ══════════════════════════════════ -->
+<div class="screen hidden" id="screen-countdown">
+  <div class="countdown-vs" id="countdown-vs"></div>
+  <div id="countdown-display" class="countdown-num">3</div>
+</div>
+
+<!-- ══ BATTLE ══════════════════════════════════════ -->
+<div class="screen hidden" id="screen-battle">
+  <div class="power-bars">
+    <span class="score-badge left"  id="score-player">YOU 0</span>
+    <span class="score-badge right" id="score-enemy">CPU 0</span>
+    <div class="bar-wrap"><div class="bar-fill bar-player" id="bar-player" style="width:50%; border-radius:15px;"></div></div>
+    <div class="vs-badge" style="color:var(--green);">VS</div>
+    <div class="bar-wrap enemy-wrap"><div class="bar-fill bar-enemy" id="bar-enemy" style="width:50%;"></div></div>
+  </div>
+  <div class="round-info" id="round-info" style="color:var(--green); font-family:monospace; font-size:10px; border-bottom:1px solid rgba(0,255,157,0.1);">[OP-REPORT]: 战区声波频率扫描中...</div>
+  <div id="loot-status-hud" style="width:100%; padding:4px 20px; background:rgba(0,0,0,0.4); display:flex; justify-content:space-between; font-family:monospace; font-size:10px; color:var(--orange);">
+    <span>BACKPACK: <span id="loot-count">0</span> PARTS</span>
+    <span id="extraction-status">SECURE</span>
+  </div>
+  <div class="arena">
+    <div class="arena-bg"></div><div class="arena-floor"></div>
+    <!-- Player -->
+    <div class="cat-container">
+      <div class="cat-name-lbl" id="cat-lbl-player" style="color:var(--green);font-weight:900;">OPERATOR</div>
+      <div style="position:relative">
+        <img class="cat-img cat-player" id="cat-player" src="cat_operator_assault.png?v=ext_1" onerror="this.src='cat_player.png?v=3'" alt="玩家猫" />
+        <div class="cat-bubble" id="bubble-player">喵！</div>
+      </div>
+    </div>
+    <!-- Timer -->
+    <div class="timer-wrap"><div id="battle-timer">15</div><div class="timer-label">SECONDS</div></div>
+    <!-- Enemy -->
+    <div class="cat-container">
+      <div class="cat-name-lbl" id="cat-lbl-enemy">CPU</div>
+      <div style="position:relative">
+        <img class="cat-img cat-enemy" id="cat-enemy" src="cat_operator_recon.png?v=ext_1" onerror="this.src='cat_enemy.png?v=3'" alt="对手猫" />
+        <div class="cat-bubble" id="bubble-enemy">喵！</div>
+      </div>
+    </div>
+  </div>
+  <div class="meow-meter-wrap">
+    <div class="meow-meter-label">MIC INPUT · 社死指数提取中</div>
+    <div class="meow-bar-outer"><div id="meow-bar"></div></div>
+  </div>
+  <div class="battle-bottom">
+    <div class="score-dots" id="score-dots"></div>
+    <button id="btn-meow" aria-label="喵叫按钮">
+      <span class="btn-meow-emoji">🐱</span>
+      <span class="btn-meow-text">喵！</span>
+      <span class="btn-meow-hint" id="meow-hint">长按/大声喵叫</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ RESULT ══════════════════════════════════════ -->
+<div class="screen hidden" id="screen-result">
+  <div class="result-title" id="result-title">胜利！</div>
+  <div class="result-cats">
+    <div class="result-cat-wrap">
+      <img class="result-cat-svg" id="result-cat-p" src="cat_player.png?v=3" alt="YOUR cat" style="width:clamp(70px,24vw,110px);object-fit:contain;" />
+      <div class="result-cat-label" id="res-lbl-player">YOU</div>
+    </div>
+    <div class="result-vs">VS</div>
+    <div class="result-cat-wrap">
+      <img class="result-cat-svg" id="result-cat-e" src="cat_enemy.png?v=3" alt="enemy cat" style="width:clamp(70px,24vw,110px);object-fit:contain;transform:scaleX(-1);" />
+      <div class="result-cat-label" id="res-lbl-enemy">CPU</div>
+    </div>
+  </div>
+  <div class="result-stat">
+    <div class="stat-item"><div class="stat-num" id="stat-p">0</div><div class="stat-lbl">喵鸣分</div></div>
+    <div class="stat-item"><div class="stat-num" id="stat-e">0</div><div class="stat-lbl">挑战分</div></div>
+    <div class="stat-item"><div class="stat-num" id="stat-mm">0</div><div class="stat-lbl" style="color:var(--red)">社死值</div></div>
+  </div>
+  <div class="result-comment" id="result-comment">正在分析你的抽象程度...</div>
+  <div style="margin: 15px 0; display:flex; flex-direction:column; align-items:center; gap:8px;" id="audio-play-wrap">
+    <div style="font-size:11px; color:#888;">🔊 魔力回放 (大型社死现场)</div>
+    <div style="display:flex; gap:10px;">
+      <button id="btn-replay-fast" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3); color:white; padding:8px 12px; border-radius:15px; font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+        🐿️ 尖叫花栗鼠
+      </button>
+      <button id="btn-replay-slow" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.3); color:white; padding:8px 12px; border-radius:15px; font-size:12px; display:inline-flex; align-items:center; gap:5px;">
+        👺 哲学低音炮
+      </button>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-again" id="btn-again">🔄 再战</button>
+    <button class="btn-home" id="btn-home">🏠 主页</button>
+    <button class="btn-share" id="btn-share">分享</button>
+  </div>
+</div>
+
+<!-- ══ HIDDEN POSTER ═══════════════════════════════ -->
+<div id="share-poster-layer" class="poster-hidden">
+  <div class="poster-header">
+    <div class="poster-title">社死战报</div>
+    <div class="poster-rank-badge" id="poster-rank">顶级猫片</div>
+  </div>
+  <div class="poster-cats">
+    <img id="poster-cat-p" src="cat_player.png?v=3" style="height:110px;" />
+    <div style="font-size:24px; font-weight:900; color:var(--gold);">VS</div>
+    <img id="poster-cat-e" src="cat_enemy.png?v=3" style="height:110px; transform:scaleX(-1);" />
+  </div>
+  <div class="poster-score-box">
+    <div class="poster-score-num" id="poster-pwr">100</div>
+    <div class="poster-score-lbl">MAX MEOW INTENSITY</div>
+    <div style="margin-top:15px; color:var(--white); font-weight:700; font-size:18px;" id="poster-tagline">“这一嗓子，整栋楼的猫都醒了！”</div>
+  </div>
+  <div class="poster-footer">
+    <div class="poster-qr-wrap" id="poster-qr"></div>
+    <div class="poster-info">
+      <h4>扫码立刻切磋</h4>
+      <p>在浏览器打开 miao5.fun<br/>对着麦克风大声喵叫吧！</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SHARE MODAL ═════════════════════════════════ -->
+<div class="screen hidden" id="screen-share-modal" style="background:rgba(0,0,0,0.85); z-index:999;">
+  <div style="width:90%; max-width:400px; background:var(--bg); border-radius:20px; overflow:hidden; border:2px solid var(--orange); display:flex; flex-direction:column; align-items:center; padding:20px; text-align:center;">
+    <div style="font-size:20px; font-weight:bold; color:var(--orange); margin-bottom:15px;">分享你的战绩</div>
+    <div id="share-img-container" style="width:100%; min-height:200px; background:#111; border-radius:10px; margin-bottom:15px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+      <span style="color:#888;">正在生成图片...</span>
+    </div>
+    <div style="font-size:14px; color:#ccc; margin-bottom:15px;">长按上方图片即可保存或分享</div>
+    
+    <!-- Viral Copy Section -->
+    <div id="viral-copy-box" style="width:100%; background:rgba(255,255,255,0.05); padding:12px; border-radius:12px; margin-bottom:15px; border:1px dashed var(--orange);">
+      <div style="font-size:11px; color:var(--orange); text-align:left; margin-bottom:5px;">🔥 小红书流量密码（已为你写好）：</div>
+      <div id="viral-text" style="font-size:13px; color:white; text-align:left; line-height:1.4; margin-bottom:10px;"></div>
+      <button id="btn-copy-xhs" style="width:100%; background:var(--white); color:black; border:none; padding:8px; border-radius:8px; font-weight:bold; font-size:12px; cursor:pointer;">📋 复制文案并分享</button>
+    </div>
+
+    <button class="btn-home" style="width:100%" id="btn-close-share">关闭</button>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════
+   喵呜 Meow v2.0 — Full Game Logic
+   ════════════════════════════════════════════════ */
+
+// ── URL Room Detection ─────────────────────────────
+const URL_PARAMS = new URLSearchParams(location.search);
+const URL_ROOM   = URL_PARAMS.get('room');
+
+// ── Stars ──────────────────────────────────────────
+(function(){
+  const sf = document.getElementById('starfield');
+  for(let i=0;i<80;i++){
+    const s=document.createElement('div'); s.className='star';
+    const sz=Math.random()*2.5+0.5;
+    s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${(Math.random()*3+1).toFixed(1)}s;animation-delay:${(Math.random()*3).toFixed(1)}s`;
+    sf.appendChild(s);
+  }
+})();
+
+// ── Petals ─────────────────────────────────────────
+function spawnPetal(n=1){
+  const emo=['😅','🤡','?','??','???','💢','💥','💀','👻','💩'];
+  for(let i=0;i<n;i++) setTimeout(()=>{
+    const p=document.createElement('div'); p.className='petal';
+    p.textContent=emo[Math.floor(Math.random()*emo.length)];
+    p.style.cssText=`left:${Math.random()*100}%;top:-30px;--dur:${(Math.random()*2+2).toFixed(1)}s;animation-delay:${(Math.random()*.5).toFixed(2)}s; font-size:${16+Math.random()*20}px; font-family:'Outfit'`;
+    document.body.appendChild(p); setTimeout(()=>p.remove(),4000);
+  },i*80);
+}
+
+// ── Flash ──────────────────────────────────────────
+function flash(col='rgba(255,255,255,1)'){
+  const el=document.getElementById('flash-overlay');
+  el.style.background=col; el.classList.remove('flash-anim');
+  void el.offsetWidth; el.classList.add('flash-anim');
+}
+
+// ── Juice Props ──────────────────────────────────
+function screenMemeGlitch() {
+  const el = document.getElementById('screen-battle');
+  el.classList.remove('screen-meme-glitch');
+  void el.offsetWidth; el.classList.add('screen-meme-glitch');
+}
+
+function spawnPopText(txt, x, y, col='var(--gold)') {
+  const p = document.createElement('div');
+  p.className = 'pop-text';
+  p.textContent = txt;
+  p.style.cssText = `left:${x}px; top:${y}px; color:${col}; font-size:${20+Math.random()*15}px;`;
+  document.getElementById('screen-battle').appendChild(p);
+  setTimeout(() => p.remove(), 800);
+}
+
+// ── Loot System ──
+let currentSessionLoot = 0;
+function spawnLoot() {
+  if(Math.random() > 0.05) return; // Drop rate
+  const loot = document.createElement('div');
+  loot.className = 'pop-text';
+  loot.textContent = ['⚙️','🔋','🔌','📟','💾'][Math.floor(Math.random()*5)];
+  const startX = Math.random() * window.innerWidth;
+  const startY = Math.random() * 300;
+  loot.style.cssText = `left:${startX}px; top:${startY}px; font-size:24px; transition: all 0.6s cubic-bezier(0.6, -0.28, 0.735, 0.045);`;
+  document.getElementById('screen-battle').appendChild(loot);
+  
+  // Magnetize to player cat after a short delay
+  setTimeout(() => {
+    const pCat = document.getElementById('cat-player').getBoundingClientRect();
+    loot.style.left = (pCat.left + pCat.width/2) + 'px';
+    loot.style.top = (pCat.top + pCat.height/2) + 'px';
+    loot.style.transform = 'scale(0.2)';
+    loot.style.opacity = '0';
+    setTimeout(() => {
+      currentSessionLoot++;
+      document.getElementById('loot-count').textContent = currentSessionLoot;
+      loot.remove();
+    }, 600);
+  }, 200);
+}
+
+// ── Web Audio SFX ────────────────────────────────
+let audioCtx = null;
+function initAudioContext() { 
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
+}
+
+function playMeowSfx(freq, type='triangle', vol=0.1) {
+  initAudioContext();
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(freq*0.5, audioCtx.currentTime + 0.1);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+}
+
+// ── Screen nav ─────────────────────────────────────
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>
+    s.id===id ? s.classList.remove('hidden') : s.classList.add('hidden'));
+}
+
+// ── LocalStorage helpers ───────────────────────────
+const LS={
+  get:k=>{ try{return JSON.parse(localStorage.getItem('mw_'+k))}catch{return null} },
+  set:(k,v)=>{ try{localStorage.setItem('mw_'+k,JSON.stringify(v))}catch{} }
+};
+
+function getNick(){
+  let n=LS.get('nick');
+  if(!n){
+    const names=['喵星侠','橘猫大侠','白猫公主','黑猫忍者','猫皇陛下','喵武士','长毛剑客','短毛刺客'];
+    n=names[Math.floor(Math.random()*names.length)]+'_'+Math.floor(Math.random()*900+100);
+    LS.set('nick',n);
+  }
+  return n;
+}
+
+async function saveScore(maxMeow, won, audio = null){
+  const s=LS.get('scores')||[];
+  const isNewRecord = !s.length || maxMeow >= Math.max(...s.map(x=>x.maxMeow));
+  s.push({maxMeow:Math.round(maxMeow),won,date:new Date().toISOString().slice(0,10)});
+  if(s.length>100) s.splice(0,s.length-100);
+  LS.set('scores',s);
+
+  // Sync to backend silently
+  const st = getMyStats();
+  const payload = { nick: getNick(), max_meow: st.maxMeow, wins: st.wins };
+  
+  // Only upload audio if it's a new record, to save bandwidth
+  if (isNewRecord && audio) {
+    payload.audio = audio;
+  }
+  
+  try {
+    await fetch('api/leaderboard.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch(e) { /* ignore network error silently */ }
+}
+
+function getMyStats(){
+  const s=LS.get('scores')||[];
+  return{
+    maxMeow: s.length ? Math.max(...s.map(x=>x.maxMeow)) : 0,
+    wins: s.filter(x=>x.won).length,
+    total: s.length
+  };
+}
+
+// ── Leaderboard ────────────────────────────────────
+const SEEDED=[
+  {name:'🏆喵皇至尊',avatar:'👑',score:98,wins:47},
+  {name:'橘猫大将',  avatar:'🐱',score:95,wins:39},
+  {name:'白猫公主',  avatar:'🤍',score:92,wins:33},
+  {name:'黑猫忍者',  avatar:'⚫',score:89,wins:28},
+  {name:'波斯贵族',  avatar:'💎',score:85,wins:22},
+  {name:'缅甸喵神',  avatar:'🌙',score:82,wins:19},
+  {name:'暹罗战士',  avatar:'🔥',score:79,wins:16},
+  {name:'玳瑁风云',  avatar:'🍂',score:76,wins:14},
+  {name:'苏格兰喵',  avatar:'🎩',score:73,wins:12},
+  {name:'美短杀手',  avatar:'⚡',score:70,wins:10},
+  {name:'拿破仑猫',  avatar:'🎖',score:67,wins:9},
+  {name:'布偶甜心',  avatar:'🎀',score:64,wins:7},
+  {name:'阿比西尼',  avatar:'🌿',score:61,wins:6},
+  {name:'孟加拉豹',  avatar:'🐆',score:58,wins:5},
+  {name:'德文卷毛',  avatar:'🌀',score:55,wins:4},
+];
+
+let currentLbTab = 'global';
+
+async function buildLeaderboard(tab = 'global') {
+  currentLbTab = tab;
+  document.getElementById('tab-lb-global').className = 'lb-tab' + (tab==='global' ? ' active' : '');
+  document.getElementById('tab-lb-global').style.borderColor = tab==='global' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tab-lb-global').style.color = tab==='global' ? 'var(--gold)' : '#888';
+  
+  document.getElementById('tab-lb-prov').className = 'lb-tab' + (tab==='prov' ? ' active' : '');
+  document.getElementById('tab-lb-prov').style.borderColor = tab==='prov' ? 'var(--gold)' : 'transparent';
+  document.getElementById('tab-lb-prov').style.color = tab==='prov' ? 'var(--gold)' : '#888';
+
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '<div style="text-align:center;padding:20px;color:#888">正在拉取排行数据...</div>';
+  const nick = getNick();
+  const st = getMyStats();
+  
+  if(tab === 'global'){
+    document.getElementById('lb-me-pin').style.display = 'flex';
+    document.getElementById('lb-subtitle').textContent = '争夺最强喵呜称号';
+    document.getElementById('lb-me-name').textContent = nick;
+    document.getElementById('lb-me-score').textContent = st.maxMeow || '—';
+    if(st.wins > 0) {
+      document.getElementById('lb-me-label').textContent = '我的战绩 · 全球已同步';
+    }
+    document.getElementById('lb-me-wins').textContent = st.wins ? `${st.wins} 胜 · ${st.total} 场` : '暂无记录';
+  } else {
+    document.getElementById('lb-me-pin').style.display = 'none';
+    document.getElementById('lb-subtitle').textContent = '为你的家乡贡献喵力！';
+  }
+
+  let all = [];
+  try {
+    const res = await fetch(`api/leaderboard.php?mode=${tab==='prov' ? 'province' : 'global'}`);
+    const json = await res.json();
+    if(json && json.data && json.data.length > 0) {
+      all = json.data.map(r => ({
+        name: r.name, // province or nick
+        avatar: tab==='prov' ? '📍' : '🐱',
+        score: parseInt(r.score),
+        wins: tab==='prov' ? parseInt(r.cat_count) : parseInt(r.wins), // for province show cat count as wins label
+        isMe: tab==='global' && r.name === nick,
+        province: r.province || '',
+        audio: r.audio_base64 || null
+      }));
+    } else {
+      if(tab === 'prov') {
+        list.innerHTML = '<div style="text-align:center;padding:20px;color:#888">暂无省份数据</div>';
+        return;
+      }
+      throw new Error("Empty data");
+    }
+  } catch(e) {
+    if(tab === 'prov') {
+      list.innerHTML = '<div style="text-align:center;padding:20px;color:#888">无法连接至服务器</div>';
+      return;
+    }
+    console.error("Failed to load global LB, using fallback", e);
+    all = [...SEEDED];
+    if(st.maxMeow > 0){
+      const idx = all.findIndex(p => p.score <= st.maxMeow);
+      const me = {name: nick, avatar: '🐱', score: st.maxMeow, wins: st.wins, isMe: true};
+      idx === -1 ? all.push(me) : all.splice(idx, 0, me);
+    }
+  }
+
+  list.innerHTML = '';
+  all.forEach((p, i) => {
+    const rank = i + 1;
+    const rc = rank === 1 ? 'lb-rank-1' : rank === 2 ? 'lb-rank-2' : rank === 3 ? 'lb-rank-3' : '';
+    const rt = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank;
+    const item = document.createElement('div');
+    item.className = 'lb-item' + (p.isMe ? ' lb-me' : '');
+    item.innerHTML = `<div class="lb-rank ${rc}">${rt}</div>
+      <div class="lb-avatar">${p.avatar}</div>
+      <div class="lb-name" style="display:flex; flex-direction:column; justify-content:center;">
+        <div style="display:flex; align-items:center; gap:5px;">
+          ${p.name}${p.isMe ? ' 👈' : ''}
+          ${p.audio ? `<span class="lb-audio-btn" style="cursor:pointer; font-size:14px;" title="播放战吼">🔊</span>` : ''}
+        </div>
+        ${tab==='global' && p.province ? `<div style="font-size:10px; color:#aaa; font-weight:normal;">📍 ${p.province}</div>` : ''}
+      </div>
+      <div class="lb-score-col">
+        <div class="lb-score">${p.score}</div>
+        <div class="lb-wins">${tab==='prov' ? p.wins+' 只猫' : p.wins+' 胜'}</div>
+      </div>`;
+      
+    if (p.audio) {
+      const audioBtn = item.querySelector('.lb-audio-btn');
+      if (audioBtn) {
+        audioBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          playAudioBase64(p.audio, 1.3 + Math.random() * 0.4);
+        });
+      }
+    }
+      
+    list.appendChild(item);
+  });
+}
+
+// ── Audio & Recording ────────────────────────────────
+let stream=null, analyser=null;
+let mediaRecorder=null, audioChunks=[];
+let latestAudioBase64=null;
+
+async function initAudio(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    analyser=audioCtx.createAnalyser();
+    analyser.fftSize=512; analyser.smoothingTimeConstant=0.5;
+    audioCtx.createMediaStreamSource(stream).connect(analyser);
+    
+    if (window.MediaRecorder) {
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { 'type' : 'audio/webm' });
+        // We only want the last 3 seconds if possible, but slicing webm is complex in JS without MediaSource.
+        // We'll just convert what we have to Base64. (We clear chunks frequently to keep it short)
+        const reader = new FileReader();
+        reader.readAsDataURL(blob); 
+        reader.onloadend = () => { latestAudioBase64 = reader.result; }
+      };
+    }
+    return true;
+  }catch{return false;}
+}
+function getMicVol(){
+  if(!analyser) return {v:0, isMeow:false};
+  const b=new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(b);
+  
+  // Spectral weighing for "Meow Signature"
+  // fftSize=512, binSize ~86Hz
+  // Low: 1-5 (86-430Hz) - Noise
+  // Mid: 6-25 (516-2150Hz) - Meow Core
+  // High: 26-60 (2.2-5.1kHz) - Harmonics
+  
+  let sLow=0; for(let i=1; i<6; i++) sLow += b[i];
+  let sMid=0; for(let i=6; i<26; i++) sMid += b[i];
+  let sHigh=0; for(let i=26; i<61; i++) sHigh += b[i];
+  
+  const vLow = sLow / 5;
+  const vMid = sMid / 20;
+  const vHigh = sHigh / 35;
+  
+  // Power is primarily from the meow band
+  const vol = Math.min(100, (vMid * 1.5 + vHigh * 0.5));
+  
+  // Confidence: High Mid energy, Low Base energy (no thumping), some High harmonics
+  const isMeow = (vMid > 25) && (vMid > vLow * 1.5);
+  
+  return { v: vol, isMeow: isMeow };
+}
+
+// Keep recording loop limited to last few seconds
+let recInterval = null;
+function startRecording() {
+  audioChunks = [];
+  latestAudioBase64 = null;
+  if(mediaRecorder && mediaRecorder.state === 'inactive'){
+    mediaRecorder.start();
+    // Restart recording every 3 seconds to only keep the last 3 seconds
+    recInterval = setInterval(()=>{
+      if(mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        audioChunks = [];
+        setTimeout(() => { if(mediaRecorder.state === 'inactive') mediaRecorder.start(); }, 50);
+      }
+    }, 3000);
+  }
+}
+function stopRecording() {
+  return new Promise((resolve) => {
+    if(recInterval) clearInterval(recInterval);
+    if(mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(audioChunks, { 'type' : 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(blob); 
+        reader.onloadend = () => { 
+          latestAudioBase64 = reader.result; 
+          resolve(latestAudioBase64);
+        };
+      };
+      mediaRecorder.stop();
+    } else {
+      resolve(latestAudioBase64);
+    }
+  });
+}
+
+// ── AI ─────────────────────────────────────────────
+let aiSt={timer:0,burst:0,base:15,burstMax:60};
+const DIFF={
+  easy:  {base:6, burstMax:28,label:'简单'},
+  normal:{base:18,burstMax:58,label:'普通'},
+  hell:  {base:30,burstMax:88,label:'地狱'}
+};
+function resetAI(d){
+  const c=DIFF[d]||DIFF.normal;
+  aiSt={timer:0,burst:0,base:c.base,burstMax:c.burstMax};
+}
+function stepAI(dt){
+  aiSt.timer+=dt;
+  if(aiSt.timer>(Math.random()*1.3+0.3)){
+    aiSt.timer=0; aiSt.burst=Math.random()*aiSt.burstMax;
+  }
+  aiSt.burst=Math.max(0,aiSt.burst-38*dt);
+  return Math.max(0,Math.min(100,aiSt.base+aiSt.burst+(Math.random()-.5)*14));
+}
+
+// ── Game State ─────────────────────────────────────
+const MODE={AI:'ai',FACE:'face',PVP:'pvp'};
+let gameMode=MODE.AI, aiDiff='easy';
+let facePhase=0, faceP1Power=0;
+let playerPower=0, enemyPower=0, playerMaxMeow=0;
+let roundTimeLeft=0;
+const ROUND_TIME=15, TOTAL_ROUNDS=3;
+let currentRound=0;
+let scores={player:0,enemy:0};
+let roundResults=[];
+let gameLoop=null, cdTimer=null;
+let btnPressed=false, lastTs=0;
+let pvpEnemyVol=0;  // latest vol from peer
+
+// ── PeerJS ─────────────────────────────────────────
+let myPeer=null, pvpConn=null, isHost=false;
+let myRoomCode='', hostRoundPower=0;
+
+function genCode(){
+  const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({length:6},()=>c[Math.floor(Math.random()*c.length)]).join('');
+}
+
+function initPeer(id,cb){
+  if(typeof Peer==='undefined'||window.PEER_UNAVAILABLE){cb(null,'PeerJS不可用');return;}
+  const isHttps = location.protocol === 'https:';
+  // Use hostname from location to ensure it works even during DNS syncing/IP access
+  const h = location.hostname || 'miao5.fun';
+  const p=new Peer(id||undefined,{
+    host: h,
+    port: isHttps ? 443 : 80,
+    path: '/myapp',
+    debug: 1,
+    secure: isHttps
+  });
+  p.on('open',pid=>cb(p,null,pid));
+  p.on('error',e=>cb(null,e.type==='unavailable-id'?'房间码已被占用，请刷新重试':'网络错误:'+e.type));
+}
+
+function setupConn(conn){
+  pvpConn=conn;
+  conn.on('data',d=>handlePvPMsg(d));
+  conn.on('close',()=>{ pvpConn=null; });
+}
+
+function handlePvPMsg(d){
+  if(!d||!d.t) return;
+  switch(d.t){
+    case 'v':    pvpEnemyVol=d.v; break;
+    case 'tick': if(!isHost) roundTimeLeft=d.s; break;
+    case 'go':   // guest: start game
+      gameMode=MODE.PVP; isHost=false;
+      maybeStartGame(); break;
+    case 'pwr':  // host receives guest power → resolve
+      if(isHost){ resolveRound(playerPower,d.v); sendPvP({t:'res',pw:playerPower,ew:d.v}); } break;
+    case 'res':  // guest receives winner result
+      if(!isHost){ resolveRound(d.ew,d.pw); } break;
+  }
+}
+
+function sendPvP(data){ if(pvpConn) try{pvpConn.send(data)}catch{} }
+
+function createRoom(){
+  myRoomCode=genCode();
+  document.getElementById('room-code-display').textContent=myRoomCode;
+  document.getElementById('room-create-status').textContent='正在连接服务器…';
+  initPeer('mw-'+myRoomCode,(p,err)=>{
+    if(err){document.getElementById('room-create-status').textContent='❌ '+err;return;}
+    myPeer=p; isHost=true;
+    document.getElementById('room-create-status').textContent='等待好友加入… 📡';
+    p.on('connection',conn=>{
+      setupConn(conn);
+      document.getElementById('room-create-status').textContent='✅ 好友已连接！即将开始…';
+      setTimeout(()=>{
+        gameMode=MODE.PVP;
+        sendPvP({t:'go'});
+        maybeStartGame();
+      },1200);
+    });
+  });
+}
+
+function joinRoom(code){
+  document.getElementById('join-status').textContent='正在连接…';
+  initPeer(null,(p,err)=>{
+    if(err){document.getElementById('join-status').textContent='❌ '+err;return;}
+    myPeer=p; isHost=false;
+    const conn=p.connect('mw-'+code.toUpperCase().trim(),{reliable:true,serialization:'json'});
+    conn.on('open',()=>{
+      document.getElementById('join-status').textContent='✅ 已连接！等待房主开始…';
+      setupConn(conn);
+    });
+    conn.on('error',()=>{ document.getElementById('join-status').textContent='❌ 连接失败，请检查房间码'; });
+    setTimeout(()=>{ if(!pvpConn) document.getElementById('join-status').textContent='⏱ 连接超时，请重试'; },15000);
+  });
+}
+
+// ── Dots ───────────────────────────────────────────
+function renderDots(){
+  const c=document.getElementById('score-dots'); c.innerHTML='';
+  for(let i=0;i<TOTAL_ROUNDS;i++){
+    const d=document.createElement('div'); d.className='dot';
+    if(i<roundResults.length) d.classList.add(roundResults[i]==='player'?'won-player':'won-enemy');
+    c.appendChild(d);
+  }
+}
+
+// ── Power bars ─────────────────────────────────────
+function updateBars(pv,ev){
+  document.getElementById('bar-player').style.width=Math.min(100,(pv/200)*100)+'%';
+  document.getElementById('bar-enemy').style.width =Math.min(100,(ev/200)*100)+'%';
+}
+
+// ── Bubble ─────────────────────────────────────────
+let bub=null;
+function bubble(who,txt){
+  const el=document.getElementById('bubble-'+who);
+  el.textContent=txt; el.classList.add('show');
+  clearTimeout(bub); bub=setTimeout(()=>el.classList.remove('show'),620);
+}
+
+// ── Battle tick ────────────────────────────────────
+function volIntensity(v){ return v > 70 ? 10 : 3; }
+
+function battleTick(ts){
+  if(!gameLoop) return;
+  initAudioContext(); 
+  const dt=lastTs?Math.min((ts-lastTs)/1000,.12):0;
+  lastTs=ts;
+  roundTimeLeft-=dt;
+  const t=Math.max(0,Math.ceil(roundTimeLeft));
+  const te=document.getElementById('battle-timer');
+  te.textContent=t; te.classList.toggle('urgent',t<=5);
+
+  // Player volume
+  const micData=getMicVol();
+  const rawPVol = micData.v + (btnPressed?20:0);
+  const pVol=Math.min(100,rawPVol);
+  if(pVol>playerMaxMeow) playerMaxMeow=pVol;
+  document.getElementById('meow-bar').style.width=pVol+'%';
+  
+  // Meow Bonus Logic
+  let pPowerAdd = pVol * dt;
+  if(micData.isMeow) {
+    pPowerAdd *= 1.5; // 50% Bonus for genuine meows
+    if(Math.random() < 0.2) {
+      spawnPopText('✨ 治愈能量!', 150, 150, 'var(--gold)');
+      playMeowSfx(440 + Math.random()*200, 'sine', 0.05);
+    }
+  }
+  playerPower += pPowerAdd;
+
+  // Enemy volume
+  let eVol=0;
+  if(gameMode===MODE.AI){
+    const aiData = stepAI(dt); // stepAI returns a number, AI is always 100% meow potential in logic
+    eVol=aiData;
+    enemyPower+=eVol*dt * (Math.random() < 0.3 ? 1.2 : 1); // Simple AI variation
+  } else if(gameMode===MODE.FACE){
+    // P1 turn: no enemy. P2 turn: show P1's power statically.
+    if(facePhase===1){ eVol=0; /* keep enemy bar showing P1 */ }
+  } else if(gameMode===MODE.PVP){
+    eVol=pvpEnemyVol;
+    enemyPower+=eVol*dt;
+    // Send volume to peer
+    if(Math.random()<0.15) sendPvP({t:'v',v:Math.round(pVol)});
+    // Host syncs timer
+    if(isHost&&Math.random()<0.06) sendPvP({t:'tick',s:Math.round(roundTimeLeft)});
+  }
+
+  // Display bars
+  if(gameMode===MODE.FACE&&facePhase===1){
+    const maxRef=ROUND_TIME*40;
+    const p2Pct=Math.min(100,(playerPower/maxRef)*100);
+    const p1Pct=Math.min(100,(faceP1Power/maxRef)*100);
+    document.getElementById('bar-player').style.width=p2Pct+'%';
+    document.getElementById('bar-enemy').style.width=p1Pct+'%';
+  } else {
+    updateBars(playerPower,enemyPower);
+  }
+
+  // Juice VFX/SFX
+  const cp=document.getElementById('cat-player');
+  const ce=document.getElementById('cat-enemy');
+  const bp=document.getElementById('bar-player');
+  const be=document.getElementById('bar-enemy');
+
+  // Player Juice
+  if(pVol>22){
+    const s = 1 + pVol*0.0035;
+    cp.style.transform = `scale(${s}) rotate(${(Math.random()-0.5)*volIntensity(pVol)}deg)`;
+    cp.classList.add('power-pulse');
+    bp.classList.toggle('glow', pVol>65);
+    
+    // Abstract Distortion Peak
+    if(pVol > 88) {
+       cp.classList.add('meme-broken');
+       if(Math.random() < 0.3) screenMemeGlitch();
+    } else {
+       cp.classList.remove('meme-broken');
+    }
+
+    if(pVol>78 && Math.random()<0.15) {
+      spawnPopText(['甚至不像猫...','别叫了求你','邻居已报警','( ఠ ͟ʖ ఠ )','草(中日双语)','老铁稳'][Math.floor(Math.random()*6)], 30+Math.random()*100, 150+Math.random()*100, 'var(--gold)');
+      playMeowSfx(220 + pVol*1.5, 'triangle', 0.1);
+    }
+    if(Math.random()<0.08) bubble('player',['喵～','( ఠ ͟ʖ ఠ )','草','哈？','草！'][Math.floor(Math.random()*5)]);
+  } else {
+    cp.style.transform = 'scale(1)';
+    cp.classList.remove('power-pulse', 'meme-broken');
+    bp.classList.remove('glow');
+  }
+
+  // Enemy Juice
+  if(eVol>22){
+    const s = 1 + eVol*0.0035;
+    ce.style.transform = `scaleX(-1) scale(${s}) rotate(${(Math.random()-0.5)*volIntensity(eVol)}deg)`;
+    ce.classList.add('power-pulse');
+    be.classList.toggle('glow', eVol>65);
+    if(eVol>78 && Math.random()<0.1) {
+      spawnPopText('💕 太萌了!', window.innerWidth-(70+Math.random()*40), 180+Math.random()*40, 'var(--cyan)');
+      playMeowSfx(180 + eVol*1.5, 'triangle', 0.05);
+    }
+    if(Math.random()<0.06) bubble('enemy',['喵～','NYA!','喵！','嗷呜！'][Math.floor(Math.random()*4)]);
+  } else {
+    ce.style.transform = 'scaleX(-1) scale(1)';
+    ce.classList.remove('power-pulse');
+    be.classList.remove('glow');
+  }
+
+  if(pVol>85 && Math.random()<0.12) {
+    flash('rgba(255,255,255,0.2)');
+    spawnPetal(2);
+  }
+
+  if(roundTimeLeft<=0 || playerPower >= 200 || enemyPower >= 200){ endRound(); return; }
+  gameLoop=requestAnimationFrame(battleTick);
+}
+
+// ── End round ──────────────────────────────────────
+function endRound(){
+  gameLoop=null; lastTs=0;
+
+  // Face mode: P1 done → prompt P2
+  if(gameMode===MODE.FACE&&facePhase===0){
+    faceP1Power=playerPower;
+    startFaceP2();
+    return;
+  }
+
+  // Face mode P2 done → compare P2 vs P1
+  if(gameMode===MODE.FACE&&facePhase===1){
+    resolveRound(faceP1Power, playerPower);
+    return;
+  }
+
+  // PvP host: send round-end signal, wait for guest power
+  if(gameMode===MODE.PVP&&isHost){
+    hostRoundPower=playerPower;
+    sendPvP({t:'end'});  // tell guest to send their power
+    // Listen for {t:'pwr'} in handlePvPMsg
+    return;
+  }
+
+  // PvP guest: send power to host
+  if(gameMode===MODE.PVP&&!isHost){
+    sendPvP({t:'pwr',v:playerPower});
+    // Wait for {t:'res'} from host
+    return;
+  }
+
+  // AI mode: direct resolve
+  resolveRound(playerPower, enemyPower);
+}
+
+function resolveRound(pPow, ePow){
+  let winner;
+  if(pPow>ePow*1.03){
+    winner='player'; scores.player++;
+    flash('rgba(0,255,157,.2)'); spawnPetal(10);
+    document.getElementById('cat-player').classList.add('winner-bounce');
+  } else if(ePow>pPow*1.03){
+    winner='enemy'; scores.enemy++;
+    flash('rgba(255,77,77,.2)');
+    document.getElementById('cat-enemy').classList.add('winner-bounce');
+    // LOOT LOSS: Fail to extract parts
+    if(currentSessionLoot > 0) {
+      spawnPopText('MIA: LOOT DROPPED!', window.innerWidth/2, 250, 'var(--red)');
+      currentSessionLoot = Math.floor(currentSessionLoot * 0.5);
+      document.getElementById('loot-count').textContent = currentSessionLoot;
+      document.getElementById('extraction-status').textContent = 'BROKEN';
+      document.getElementById('extraction-status').style.color = 'var(--red)';
+    }
+  } else {
+    winner='draw'; flash('rgba(255,183,50,.2)');
+  }
+  roundResults.push(winner);
+  document.getElementById('score-player').textContent=`YOU ${scores.player}`;
+  document.getElementById('score-enemy').textContent=`OPP ${scores.enemy}`;
+  renderDots();
+  setTimeout(()=>{
+    document.getElementById('cat-player').classList.remove('winner-bounce');
+    document.getElementById('cat-enemy').classList.remove('winner-bounce');
+    document.getElementById('extraction-status').textContent = 'SECURE';
+    document.getElementById('extraction-status').style.color = 'var(--orange)';
+    if(scores.player>=Math.ceil(TOTAL_ROUNDS/2)||scores.enemy>=Math.ceil(TOTAL_ROUNDS/2)||currentRound>=TOTAL_ROUNDS)
+      showResult();
+    else startRound();
+  },1800);
+}
+
+// ── Face P2 turn ───────────────────────────────────
+function startFaceP2(){
+  // Show "pass phone" countdown
+  showScreen('screen-countdown');
+  document.getElementById('countdown-vs').textContent='🎉 传给朋友！';
+  const el=document.getElementById('countdown-display');
+  el.className='countdown-num'; el.textContent='📱';
+  setTimeout(()=>{
+    facePhase=1;
+    playerPower=0;
+    document.getElementById('countdown-vs').textContent='P2 准备好了吗？';
+    // Show the P1 score in enemy bar from start
+    startCountdown(()=>{
+      showScreen('screen-battle');
+      document.getElementById('cat-lbl-player').textContent='P2';
+      document.getElementById('cat-lbl-enemy').textContent='P1 目标';
+      document.getElementById('round-info').textContent='P2 的回合！萌死 P1 喵！';
+      document.getElementById('meow-hint').textContent='P2 加油喵！';
+      lastTs=0; gameLoop=requestAnimationFrame(battleTick);
+    });
+  },2200);
+}
+
+// ── Start round ────────────────────────────────────
+function startRound(){
+  currentRound++; playerPower=0; enemyPower=0; pvpEnemyVol=0;
+  roundTimeLeft=ROUND_TIME; facePhase=0;
+  if(gameMode===MODE.AI) resetAI(aiDiff);
+  const nick=getNick().slice(0,9);
+  const enmLbl=gameMode===MODE.FACE?'P2':gameMode===MODE.AI?('AI·'+(DIFF[aiDiff]?.label||'')):'对手';
+  document.getElementById('cat-lbl-player').textContent=nick;
+  document.getElementById('cat-lbl-enemy').textContent=enmLbl;
+  document.getElementById('round-info').textContent=`处刑正在进行 · ( ఠ ͟ʖ ఠ )`;
+  document.getElementById('meow-hint').textContent='别害羞，请开始你的表演';
+  document.getElementById('cat-player').style.cssText='';
+  document.getElementById('cat-enemy').style.cssText='';
+  updateBars(0,0);
+  startCountdown(()=>{ showScreen('screen-battle'); startRecording(); lastTs=0; gameLoop=requestAnimationFrame(battleTick); });
+}
+
+// ── Countdown ──────────────────────────────────────
+function startCountdown(cb){
+  showScreen('screen-countdown');
+  let n=3;
+  const el=document.getElementById('countdown-display');
+  el.className='countdown-num'; el.textContent=n;
+  document.getElementById('countdown-vs').textContent='';
+  clearInterval(cdTimer);
+  cdTimer=setInterval(()=>{
+    n--;
+    if(n>0){
+      el.className='countdown-num'; el.textContent=n;
+      void el.offsetWidth; el.style.animation='none';
+      requestAnimationFrame(()=>{ el.style.animation=''; });
+    } else if(n===0){
+      el.className='countdown-go'; el.textContent='喵！'; flash('rgba(255,200,0,.5)');
+    } else {
+      clearInterval(cdTimer); cb();
+    }
+  },900);
+}
+
+// ── Show result ────────────────────────────────────
+async function showResult(){
+  showScreen('screen-result');
+  const win=scores.player>scores.enemy, draw=scores.player===scores.enemy;
+  const nick=getNick(), titleEl=document.getElementById('result-title');
+  const commentEl=document.getElementById('result-comment');
+  document.getElementById('res-lbl-player').textContent=nick.slice(0,9);
+  document.getElementById('res-lbl-enemy').textContent=
+    gameMode===MODE.PVP?'对手':'撤离点阻截';
+    
+  if(draw){
+    titleEl.textContent='撤离中断'; titleEl.className='result-title draw';
+    commentEl.textContent='双方陷入僵持，搜刮物资被判定为无效丢失。';
+  } else if(win){
+    titleEl.textContent='撤离成功'; titleEl.className='result-title win';
+    titleEl.style.color='var(--green)';
+    commentEl.textContent=`干员已安全带出 ${currentSessionLoot} 个战术零件！您的资产价值上升了！`;
+    const totalParts = (LS.get('total_parts') || 0) + currentSessionLoot;
+    LS.set('total_parts', totalParts);
+    spawnPetal(20); flash('rgba(0,255,157,.2)');
+    document.getElementById('result-cat-p').classList.add('win-cat');
+  } else {
+    titleEl.textContent='行动失败 (MIA)'; titleEl.className='result-title lose';
+    titleEl.style.color='var(--red)';
+    commentEl.textContent='撤离点被占领，物资全部丢失。干员身陷社死危机。';
+    currentSessionLoot = 0;
+  }
+  document.getElementById('stat-p').textContent=scores.player;
+  document.getElementById('stat-e').textContent=scores.enemy;
+  document.getElementById('stat-mm').textContent=currentSessionLoot;
+  document.querySelectorAll('.stat-lbl')[2].textContent = '摸金收益';
+  
+  const b64 = await stopRecording();
+  saveScore(playerMaxMeow, win, b64);
+  
+  if(myPeer&&gameMode!==MODE.PVP){myPeer.destroy();myPeer=null;}
+}
+
+// ── Start match ────────────────────────────────────
+function startMatch(){
+  scores={player:0,enemy:0}; roundResults=[]; currentRound=0; playerMaxMeow=0;
+  currentSessionLoot = 0;
+  document.getElementById('loot-count').textContent = '0';
+  renderDots();
+  document.getElementById('score-player').textContent='YOU 0';
+  document.getElementById('score-enemy').textContent='OPP 0';
+  document.getElementById('result-cat-p').classList.remove('win-cat');
+  startRound();
+}
+
+async function maybeStartMatch(){
+  if(audioCtx){ startMatch(); return; }
+  showScreen('screen-perm');
+}
+
+// ── Diff buttons ───────────────────────────────────
+document.querySelectorAll('.diff-btn').forEach(btn=>{
+  btn.addEventListener('click',e=>{
+    e.stopPropagation(); aiDiff=btn.dataset.diff;
+    document.querySelectorAll('.diff-btn').forEach(b=>b.className='diff-btn');
+    btn.classList.add(aiDiff==='easy'?'sel-easy':aiDiff==='normal'?'sel-normal':'sel-hell');
+  });
+});
+
+// ── Mode select ────────────────────────────────────
+document.getElementById('btn-start').addEventListener('click',()=>{
+  showScreen('screen-mode');
+  document.getElementById('nick-input').value=getNick();
+});
+document.getElementById('mode-back').addEventListener('click',()=>showScreen('screen-title'));
+document.getElementById('nick-input').addEventListener('change',e=>{
+  const v=e.target.value.trim(); if(v.length>=2) LS.set('nick',v);
+});
+document.getElementById('card-ai').addEventListener('click',()=>{
+  gameMode=MODE.AI; maybeStartMatch();
+});
+document.getElementById('card-face').addEventListener('click',()=>{
+  gameMode=MODE.FACE; maybeStartMatch();
+});
+document.getElementById('card-lb').addEventListener('click',()=>{
+  buildLeaderboard(); showScreen('screen-leaderboard');
+});
+document.getElementById('lb-back').addEventListener('click',()=>showScreen('screen-mode'));
+document.getElementById('tab-lb-global').addEventListener('click',()=>buildLeaderboard('global'));
+document.getElementById('tab-lb-prov').addEventListener('click',()=>buildLeaderboard('prov'));
+
+// Achievements Logic
+document.getElementById('card-ach').addEventListener('click',()=>{
+  buildAchievements(); showScreen('screen-achievements');
+});
+document.getElementById('ach-back').addEventListener('click',()=>showScreen('screen-mode'));
+
+function buildAchievements(){
+  const list = document.getElementById('ach-list');
+  list.innerHTML = '';
+  const st = getMyStats();
+  const wins = st.wins;
+  
+  const badges = [
+    { threshold: 1, name: '喵鸣初犯', icon: '🐾', desc: '第一次公开处刑（社死）' },
+    { threshold: 5, name: '渐入魔性', icon: '😵‍💫', desc: '累计社死 5 次' },
+    { threshold: 10, name: '邻居克星', icon: '📢', desc: '累计社死 10 次' },
+    { threshold: 20, name: '猫片主演', icon: '🎥', desc: '累计社死 20 次' },
+    { threshold: 50, name: '喵呜母体', icon: '🤖', desc: '累计社死 50 次' },
+    { threshold: 100, name: '社死之神', icon: '🤡', desc: '登峰造极，人类已经无法理解你' },
+  ];
+  
+  badges.forEach(b => {
+    const unlocked = wins >= b.threshold;
+    const item = document.createElement('div');
+    item.style.cssText = `background: ${unlocked ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.3)'}; border-radius:12px; padding:15px; display:flex; align-items:center; gap:15px; border:1px solid ${unlocked ? 'rgba(255,215,0,0.3)' : 'rgba(255,255,255,0.05)'}; filter: grayscale(${unlocked ? '0' : '100%'}); opacity: ${unlocked ? '1' : '0.5'}`;
+    item.innerHTML = `
+      <div style="font-size:36px; line-height:1; min-width:40px; text-align:center;">${b.icon}</div>
+      <div style="flex:1">
+        <div style="font-weight:bold; font-size:16px; color:${unlocked ? 'var(--gold)' : '#999'}">${b.name}</div>
+        <div style="font-size:12px; color:#ccc; margin-top:4px;">${b.desc}</div>
+      </div>
+      ${unlocked ? '<div style="font-size:12px; color:var(--green); background:rgba(57,255,128,0.1); padding:2px 6px; border-radius:4px;">已解锁</div>' : '<div style="font-size:12px; color:#888;">未解锁</div>'}
+    `;
+    list.appendChild(item);
+  });
+}
+
+// Skins Logic
+document.getElementById('card-skin').addEventListener('click',()=>{
+  buildSkins(); showScreen('screen-skins');
+});
+document.getElementById('skin-back').addEventListener('click',()=>showScreen('screen-mode'));
+
+function buildSkins() {
+  const list = document.getElementById('skin-list');
+  list.innerHTML = '';
+  const st = getMyStats();
+  const wins = st.wins;
+  const currentSkin = LS.get('equipped_skin') || 'default';
+  
+  const skins = [
+    { id: 'default', name: '抽象橘猫', icon: '🐱', req: 0, class: '' },
+    { id: 'cyber', name: '绿光电子猫', icon: '🕶️', req: 1, class: 'skin-cyber' },
+    { id: 'dark', name: '影流之铲', icon: '🥷', req: 10, class: 'skin-dark' },
+    { id: 'king', name: '社死带师', icon: '🤡', req: 50, class: 'skin-king has-crown' }
+  ];
+  
+  skins.forEach(s => {
+    const unlocked = wins >= s.req;
+    const isEq = currentSkin === s.id;
+    const item = document.createElement('div');
+    
+    item.style.cssText = `background: ${unlocked ? (isEq ? 'rgba(255,215,0,0.2)' : 'rgba(255,255,255,0.05)') : 'rgba(0,0,0,0.3)'}; 
+      border-radius:12px; padding:15px; display:flex; flex-direction:column; align-items:center; gap:10px; 
+      border:2px solid ${isEq ? 'var(--gold)' : (unlocked ? 'rgba(255,255,255,0.1)' : 'transparent')}; 
+      filter: grayscale(${unlocked ? '0' : '100%'}); opacity: ${unlocked ? '1' : '0.5'};
+      cursor: ${unlocked ? 'pointer' : 'default'}; transition: all 0.2s;`;
+      
+    // Create preview cat using the actual classes
+    item.innerHTML = `
+      <div style="position:relative; width:60px; height:60px;">
+        <img src="cat_player.png" style="width:100%; height:100%; object-fit:contain;" class="${s.class}">
+        ${s.id==='king' ? '<div style="position:absolute; top:-15px; left:50%; transform:translateX(-50%) rotate(15deg); font-size:24px;">👑</div>' : ''}
+      </div>
+      <div style="font-weight:bold; font-size:14px; color:${unlocked ? (isEq? 'var(--gold)' : 'white') : '#999'}">${s.name}</div>
+      ${unlocked ? 
+        (isEq ? '<div style="font-size:12px; color:var(--gold); padding:2px 8px; border-radius:10px; background:rgba(255,215,0,0.1);">已装备</div>' 
+              : '<div style="font-size:12px; color:#aaa;">点击装备</div>') 
+        : `<div style="font-size:12px; color:#888;">${s.req}胜解锁</div>`}
+    `;
+    
+    if (unlocked) {
+      item.addEventListener('click', () => {
+        LS.set('equipped_skin', s.id);
+        applySkinToPlayer();
+        buildSkins(); // refresh UI
+      });
+    }
+    list.appendChild(item);
+  });
+}
+
+function applySkinToPlayer() {
+  const sId = LS.get('equipped_skin') || 'default';
+  const playerCatWrap = document.getElementById('cat-player').parentElement;
+  
+  // Remove all old skin classes and addons
+  document.getElementById('cat-player').className = 'cat-img cat-player';
+  playerCatWrap.classList.remove('has-crown');
+  
+  // Add new to battle cat
+  if (sId === 'cyber') document.getElementById('cat-player').classList.add('skin-cyber');
+  if (sId === 'dark') document.getElementById('cat-player').classList.add('skin-dark');
+  if (sId === 'king') {
+    document.getElementById('cat-player').classList.add('skin-king');
+    playerCatWrap.classList.add('has-crown');
+    if(!playerCatWrap.querySelector('.crown-addon')){
+      const c = document.createElement('div');
+      c.className = 'crown-addon';
+      c.textContent = '👑';
+      playerCatWrap.appendChild(c);
+    }
+  }
+  
+  // Apply to result screen cat wrapper
+  const resCatWrap = document.getElementById('result-cat-p').parentElement;
+  document.getElementById('result-cat-p').className = 'result-cat-svg';
+  resCatWrap.classList.remove('has-crown');
+  if (sId === 'cyber') document.getElementById('result-cat-p').classList.add('skin-cyber');
+  if (sId === 'dark') document.getElementById('result-cat-p').classList.add('skin-dark');
+  if (sId === 'king') {
+    document.getElementById('result-cat-p').classList.add('skin-king');
+    resCatWrap.classList.add('has-crown');
+    if(!resCatWrap.querySelector('.crown-addon')){
+      const c = document.createElement('div');
+      c.className = 'crown-addon';
+      c.textContent = '👑';
+      resCatWrap.appendChild(c);
+    }
+  }
+}
+
+// ── PvP / Room ─────────────────────────────────────
+document.getElementById('card-pvp').addEventListener('click',()=>{
+  showScreen('screen-room'); switchTab('create'); createRoom();
+});
+document.getElementById('room-back').addEventListener('click',()=>{
+  if(myPeer){myPeer.destroy();myPeer=null;} showScreen('screen-mode');
+});
+
+function switchTab(tab){
+  const cp=document.getElementById('room-create-panel');
+  const jp=document.getElementById('room-join-panel');
+  const tc=document.getElementById('tab-create');
+  const tj=document.getElementById('tab-join');
+  if(tab==='create'){
+    cp.style.display='flex'; jp.style.display='none';
+    tc.classList.add('active'); tj.classList.remove('active');
+  } else {
+    cp.style.display='none'; jp.style.display='flex';
+    tc.classList.remove('active'); tj.classList.add('active');
+    if(URL_ROOM) document.getElementById('join-code-input').value=URL_ROOM;
+  }
+}
+document.getElementById('tab-create').addEventListener('click',()=>{
+  switchTab('create');
+  if(myPeer){myPeer.destroy();myPeer=null;}
+  createRoom();
+});
+document.getElementById('tab-join').addEventListener('click',()=>switchTab('join'));
+
+document.getElementById('btn-copy-link').addEventListener('click',()=>{
+  const link=`${location.origin}${location.pathname}?room=${myRoomCode}`;
+  const btn=document.getElementById('btn-copy-link');
+  
+  const successHook = () => {
+    btn.textContent='✅ 已复制！发给好友吧';
+    setTimeout(()=>{btn.textContent='📋 复制邀请链接';},2500);
+  };
+  
+  const fallbackCopy = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = link;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      successHook();
+    } catch(e) {
+      alert('邀请链接：\n' + link);
+    }
+  };
+
+  if(navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(link).then(successHook).catch(fallbackCopy);
+  } else {
+    fallbackCopy();
+  }
+});
+
+document.getElementById('btn-join-go').addEventListener('click',()=>{
+  const code=document.getElementById('join-code-input').value.trim().toUpperCase();
+  if(code.length!==6){document.getElementById('join-status').textContent='请输入6位房间码';return;}
+  gameMode=MODE.PVP; isHost=false; joinRoom(code);
+});
+
+// ── Permission ──────────────────────────────────────
+document.getElementById('btn-perm').addEventListener('click',async()=>{ 
+  console.log("AUTHORIZING...");
+  await initAudio(); 
+  startMatch(); 
+});
+document.getElementById('btn-skip').addEventListener('click',()=>{
+  console.log("SKIPPING PERM...");
+  startMatch();
+});
+
+// ── Meow button ─────────────────────────────────────
+const meowBtn=document.getElementById('btn-meow');
+function onMeowDown(e){
+  e.preventDefault();btnPressed=true;meowBtn.classList.add('pressing');
+  if(navigator.vibrate) navigator.vibrate(50);
+  const r=document.createElement('div');r.className='ripple';
+  r.style.cssText='width:60px;height:60px;left:calc(50% - 30px);top:calc(50% - 30px)';
+  meowBtn.appendChild(r);setTimeout(()=>r.remove(),600);
+}
+function onMeowUp(e){e.preventDefault();btnPressed=false;meowBtn.classList.remove('pressing');}
+meowBtn.addEventListener('pointerdown',onMeowDown,{passive:false});
+meowBtn.addEventListener('pointerup',  onMeowUp,  {passive:false});
+meowBtn.addEventListener('pointerleave',onMeowUp, {passive:false});
+
+// ── Result buttons ──────────────────────────────────
+async function playAudioBase64(base64Str, pitch = 1.5) {
+  if(!audioCtx) return;
+  try {
+    const raw = window.atob(base64Str.split(',')[1] || base64Str);
+    const rawLength = raw.length;
+    const array = new Uint8Array(new ArrayBuffer(rawLength));
+    for(let i = 0; i < rawLength; i++) { array[i] = raw.charCodeAt(i); }
+    const audioBuffer = await audioCtx.decodeAudioData(array.buffer);
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.playbackRate.value = pitch;
+    source.connect(audioCtx.destination);
+    source.start(0);
+  } catch(e) { console.error('Audio playback failed', e); }
+}
+
+// ── Funny Replay Logic ────────────────────────────
+function playFunnyMeow(rate = 1.0) {
+  if(!latestAudioBase64) return;
+  const audio = new Audio(latestAudioBase64);
+  audio.playbackRate = rate;
+  audio.play();
+  if(rate > 1.2) spawnPopText('🐿️ 唧唧!', window.innerWidth/2, 200, 'var(--cyan)');
+  if(rate < 0.8) spawnPopText('👺 哲♂学!', window.innerWidth/2, 200, 'var(--red)');
+}
+
+document.getElementById('btn-again').addEventListener('click',()=>{ startMatch(); });
+document.getElementById('btn-home').addEventListener('click',()=>{
+  if(myPeer){myPeer.destroy();myPeer=null;} pvpConn=null;
+  showScreen('screen-title');
+});
+document.getElementById('btn-replay-fast').onclick = () => playFunnyMeow(1.6);
+document.getElementById('btn-replay-slow').onclick = () => playFunnyMeow(0.65);
+document.getElementById('btn-close-share').addEventListener('click', () => {
+  document.getElementById('screen-share-modal').classList.add('hidden');
+});
+
+document.getElementById('btn-share').addEventListener('click', () => {
+  const modal = document.getElementById('screen-share-modal');
+  const container = document.getElementById('share-img-container');
+  container.innerHTML = '<span style="color:#888;">正在生成魔性战报...</span>';
+  modal.classList.remove('hidden');
+
+  const pwr = Math.round(playerMaxMeow || 0);
+  const persona = getMeowPersona();
+  
+  document.getElementById('poster-pwr').textContent = pwr;
+  document.getElementById('poster-rank').textContent = persona.name;
+  document.getElementById('poster-tagline').textContent = `“${persona.tag}”`;
+  document.getElementById('poster-cat-p').src = document.getElementById('result-cat-p').src;
+  document.getElementById('poster-cat-e').src = document.getElementById('result-cat-e').src;
+  
+  // Update Viral Copy
+  const viralText = `${persona.emojis} ${persona.xhs} \n\n来 #喵呜 #miao5 测试你的声音人格！`;
+  document.getElementById('viral-text').innerText = viralText;
+  document.getElementById('btn-copy-xhs').onclick = () => {
+    navigator.clipboard.writeText(viralText).then(() => {
+      document.getElementById('btn-copy-xhs').innerText = '✅ 已复制，火速去分享！';
+      setTimeout(() => { document.getElementById('btn-copy-xhs').innerText = '📋 复制文案并分享'; }, 2000);
+    });
+  };
+
+  // Clear and gen QR
+  const qrEl = document.getElementById('poster-qr');
+  qrEl.innerHTML = '';
+  // Room link or main link
+  const roomLink = `${location.origin}${location.pathname}${myRoomCode ? '?room='+myRoomCode : ''}`;
+  
+  if(typeof QRCode !== 'undefined'){
+    try {
+      new QRCode(qrEl, {
+        text: roomLink,
+        width: 90,
+        height: 90,
+        colorDark : "#ffd700",
+        colorLight : "rgba(0,0,0,0)",
+        correctLevel : QRCode.CorrectLevel.H,
+        // EasyQRCodeJS Art Options
+        dotScale: 0.5,
+        drawer: 'dot',
+        logo: "cat_player.png?v=3",
+        logoWidth: 28,
+        logoHeight: 28,
+        logoBackgroundColor: 'rgba(26, 13, 46, 1)', 
+        logoBackgroundTransparent: false,
+        PO_HL: '#ff7b35', // Position patterns
+        PI_HL: '#ff7b35',
+        quietZone: 5
+      });
+    } catch(e) {
+      console.warn("QR beauty failed, fallback", e);
+      new QRCode(qrEl, { text: roomLink, width: 90, height: 90 });
+    }
+  }
+
+  // Render to canvas
+  setTimeout(() => {
+    if (typeof html2canvas !== 'undefined') {
+      const target = document.getElementById('share-poster-layer');
+      html2canvas(target, { 
+        backgroundColor: '#1a0d2e', 
+        scale: 2, 
+        useCORS: true,
+        logging: false
+      }).then(canvas => {
+        const img = new Image();
+        img.src = canvas.toDataURL('image/png');
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.borderRadius = '10px';
+        container.innerHTML = '';
+        container.appendChild(img);
+        if(typeof playMeowSfx !== 'undefined') playMeowSfx(600, 'sine', 0.05); 
+      }).catch(err => {
+        console.error("Poster gen failed", err);
+        container.innerHTML = '<span style="color:var(--red);">生成失败，请手动截图分享喵~</span>';
+      });
+    }
+  }, 400); 
+});
+
+// ── Idle petals ─────────────────────────────────────
+setInterval(()=>{ if(!document.getElementById('screen-title').classList.contains('hidden')) spawnPetal(1); },2200);
+spawnPetal(5);
+
+// ── Auto join from URL ──────────────────────────────
+if(URL_ROOM){
+  gameMode=MODE.PVP; isHost=false;
+  showScreen('screen-room'); switchTab('join');
+  document.getElementById('join-code-input').value=URL_ROOM;
+  joinRoom(URL_ROOM);
+} else {
+  showScreen('screen-title');
+}
+
+// Initial skin check
+applySkinToPlayer();
+</script>
+</body>
+</html>
