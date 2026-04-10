@@ -47,7 +47,7 @@
     .radar-beam {
       position:absolute; width:200%; height:200%; top:-50%; left:-50%;
       background: conic-gradient(from 0deg, rgba(0,255,157,0.1), transparent 60deg);
-      animation: radarScan 4s linear infinite; pointer-events:none;
+      animation: radarScan 4s linear infinite; pointer-events:none; z-index:1;
     }
     @keyframes radarScan { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
     .flash-overlay{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:0;}
@@ -1885,32 +1885,46 @@ document.getElementById('btn-join-go').addEventListener('click',()=>{
   gameMode=MODE.PVP; isHost=false; joinRoom(code);
 });
 
-// ── Permission & Boot ──
-document.getElementById('btn-perm').onclick = function() {
-  logMobile("BUTTON_CLICKED");
-  const btn = this;
-  btn.textContent = 'BOOTING...';
-  
-  // 1. Synchronous Action for iOS
-  initAudioContext();
-  
-  // 2. Start Async Auth
-  startTacticalAudio().then(success => {
-    if(!success) {
-      logMobile("FALLING_BACK_MANUAL");
+// ── Permission & Boot (iOS Final Fix) ──
+function bindEvents() {
+    const btnPerm = document.getElementById('btn-perm');
+    if(!btnPerm) return;
+    
+    btnPerm.onclick = function() {
+      try {
+        console.log("MOBILE_CLICK_ATTACHED");
+        this.textContent = 'CONNECTING...';
+        initAudioContext();
+        startTacticalAudio().then(() => {
+          startMatch();
+        }).catch(err => {
+          console.error(err);
+          isManualMode = true;
+          startMatch();
+        });
+      } catch(e) {
+        alert("BOOT_REJECTED: " + e.message);
+      }
+    };
+    
+    const btnSkip = document.getElementById('btn-skip');
+    if(btnSkip) {
+        btnSkip.onclick = function() {
+            isManualMode = true;
+            startMatch();
+        };
     }
-    startMatch();
-  });
-};
+}
 
-document.getElementById('btn-skip').onclick = function() {
-  logMobile("SKIP_CLICKED");
-  isManualMode = true;
-  startMatch();
-};
+// Ensure binding
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindEvents);
+} else {
+    bindEvents();
+}
 
-window.onerror = function(msg, url, line) {
-  logMobile(`ERR: ${msg} | L: ${line}`);
+window.onerror = function(m, u, l) {
+  alert("FATAL_JS_ERR: " + m + " at line " + l);
 };
 document.getElementById('btn-skip').addEventListener('click',()=>{
   console.log("SKIPPING PERM...");
