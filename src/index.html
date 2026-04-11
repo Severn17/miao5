@@ -1886,7 +1886,10 @@ document.getElementById('btn-join-go').addEventListener('click',()=>{
   gameMode=MODE.PVP; isHost=false; joinRoom(code);
 });
 
-// ── Permission & Boot (Consolidated Fix) ──
+// ── Tactical Boot (Consolidated for iOS/Mobile) ──
+let micActive = false;
+let isManualMode = false;
+
 function initTacticalCore() {
     const btnPerm = document.getElementById('btn-perm');
     const btnSkip = document.getElementById('btn-skip');
@@ -1894,22 +1897,32 @@ function initTacticalCore() {
     if (btnPerm) {
         btnPerm.onclick = function(e) {
             e.preventDefault();
-            this.textContent = 'CONNECTING...';
-            this.style.opacity = '0.5';
+            console.log("TACTICAL_INPUT: USER_INIT_START");
             
-            // 1. SYNC: Unlock Audio for iOS
-            if(!window.audioCtx) {
-                window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            // 1. SYNC ACTION (Must be first to satisfy iOS)
+            if(!window.audioCtx) window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             if(window.audioCtx.state === 'suspended') window.audioCtx.resume();
             
-            // 2. ASYNC: Mic & Start
-            startTacticalAudio().then(() => {
-                startMatch();
+            // 2. IMMEDIATE FEEDBACK
+            this.textContent = 'CONNECTING...';
+            this.style.pointerEvents = 'none';
+            this.style.opacity = '0.5';
+
+            // 3. START GAME IMMEDIATELY (Don't wait for mic)
+            startMatch();
+            
+            // 4. BACKGROUND MIC AUTH
+            startTacticalAudio().then(success => {
+                if(success) {
+                    micActive = true;
+                    console.log("TACTICAL_COMMS: ONLINE");
+                } else {
+                    console.warn("TACTICAL_COMMS: DENIED_FALLBACK_MANUAL");
+                    isManualMode = true;
+                }
             }).catch(err => {
-                console.warn("MIC_FAIL", err);
+                console.error("TACTICAL_FATAL:", err);
                 isManualMode = true;
-                startMatch();
             });
         };
     }
@@ -1923,7 +1936,7 @@ function initTacticalCore() {
     }
 }
 
-// Global Boot
+// Global System Check
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initTacticalCore);
 } else {
@@ -1931,27 +1944,33 @@ if (document.readyState === 'loading') {
 }
 
 window.onerror = function(m, u, l) {
-    console.error("MOBILE_ERR:", m, l);
-    // Silent fail to log
+    if(document.getElementById('mobile-log')) {
+        document.getElementById('mobile-log').textContent = `SYSERR: ${m} (Line ${l})`;
+    }
 };
 
-// ── Meow button ─────────────────────────────────────
-const meowBtn=document.getElementById('btn-meow');
-function onMeowDown(e){
-  e.preventDefault(); btnPressed=true; meowBtn.classList.add('pressing');
-  if(navigator.vibrate) navigator.vibrate(50);
-}
-function onMeowUp(e){ e.preventDefault(); btnPressed=false; meowBtn.classList.remove('pressing'); }
+// ── Interaction Hardware ──
+const meowBtn = document.getElementById('btn-meow');
 if(meowBtn) {
-    meowBtn.addEventListener('pointerdown', onMeowDown, {passive:false});
-    meowBtn.addEventListener('pointerup',   onMeowUp,   {passive:false});
+    const handleDown = (e) => {
+        e.preventDefault(); btnPressed = true;
+        meowBtn.classList.add('pressing');
+        if(navigator.vibrate) navigator.vibrate(40);
+    };
+    const handleUp = (e) => {
+        e.preventDefault(); btnPressed = false;
+        meowBtn.classList.remove('pressing');
+    };
+    meowBtn.addEventListener('pointerdown', handleDown, {passive:false});
+    meowBtn.addEventListener('pointerup', handleUp, {passive:false});
+    meowBtn.addEventListener('pointerleave', handleUp, {passive:false});
 }
 
-// ── Result buttons ──────────────────────────────────
+// ── Result Handling ──
 document.getElementById('btn-again').onclick = () => startMatch();
 document.getElementById('btn-home').onclick = () => {
-  if(myPeer){myPeer.destroy();myPeer=null;}
-  showScreen('screen-title');
+    if(myPeer) { myPeer.destroy(); myPeer = null; }
+    showScreen('screen-title');
 };
 document.getElementById('btn-skip').addEventListener('click',()=>{
   console.log("SKIPPING PERM...");
