@@ -1111,9 +1111,8 @@ async function buildLeaderboard(tab = 'global') {
 }
 
 // ── Audio & Recording ────────────────────────────────
-let stream=null, analyser=null;
-let mediaRecorder=null, audioChunks=[];
-let latestAudioBase64=null;
+mediaRecorder=null; audioChunks=[];
+latestAudioBase64=null;
 
 async function initAudio(){
   try{
